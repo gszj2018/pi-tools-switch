@@ -4,6 +4,10 @@
  * Stateless library module: provides config types and loading functions only,
  * and holds no module state. The extension entry (index.ts) loads the config
  * at startup and injects it into feature modules via the getConfig callback.
+ *
+ * Invalid config entries are normalized away (never thrown); the resulting
+ * problems are collected in `errors` so the caller can surface them to the
+ * user. File-level failures (unreadable file, malformed JSON) still throw.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -34,6 +38,13 @@ export interface Config {
   gatingModes: Record<string, GatingModeConfig>;
 }
 
+/** A normalized config plus the problems found while normalizing it. */
+export interface ConfigLoadResult {
+  config: Config;
+  /** Human-readable descriptions of invalid/ignored entries (empty when clean). */
+  errors: string[];
+}
+
 export const DEFAULT_CONFIG: Config = {
   presets: {},
   toolGuide: { enabled: true },
@@ -45,41 +56,79 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
+/**
+ * Coerce an unknown value to a string array. Non-array values and non-string
+ * entries are dropped and reported through `errors`, prefixed by `field`.
+ */
+function toStringArray(value: unknown, errors: string[], field: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    errors.push(`${field}: expected an array of strings, got ${typeof value}`);
+    return [];
+  }
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item === "string") result.push(item);
+    else errors.push(`${field}: ignored non-string entry ${JSON.stringify(item)}`);
+  }
+  return result;
 }
 
-function normalizePresets(value: unknown): Record<string, string[]> {
-  if (!isRecord(value)) return {};
+function normalizePresets(value: unknown, errors: string[]): Record<string, string[]> {
+  if (value === undefined) return {};
+  if (!isRecord(value)) {
+    errors.push(`presets: expected an object, got ${typeof value}`);
+    return {};
+  }
   const presets: Record<string, string[]> = {};
   for (const [name, tools] of Object.entries(value)) {
-    if (!isValidPresetName(name) || !Array.isArray(tools)) continue;
-    const valid = tools.filter(
-      (tool): tool is BuiltinToolName =>
-        typeof tool === "string" && (BUILTIN_TOOL_NAMES as readonly string[]).includes(tool),
-    );
+    if (!isValidPresetName(name)) {
+      errors.push(`presets["${name}"]: invalid preset name (must match [a-z][a-z0-9_-]*)`);
+      continue;
+    }
+    if (!Array.isArray(tools)) {
+      errors.push(`presets["${name}"]: expected an array of tool names, got ${typeof tools}`);
+      continue;
+    }
+    const valid: BuiltinToolName[] = [];
+    for (const tool of tools) {
+      if (typeof tool === "string" && (BUILTIN_TOOL_NAMES as readonly string[]).includes(tool)) {
+        valid.push(tool as BuiltinToolName);
+      } else {
+        errors.push(`presets["${name}"]: ignored unknown tool ${JSON.stringify(tool)}`);
+      }
+    }
     presets[name] = [...new Set(valid)];
   }
   return presets;
 }
 
-function normalizeGatingMode(value: unknown): GatingModeConfig | null {
-  if (!isRecord(value)) return null;
+function normalizeGatingMode(name: string, value: unknown, errors: string[]): GatingModeConfig | null {
+  if (!isRecord(value)) {
+    errors.push(`gatingModes["${name}"]: expected an object, got ${typeof value}`);
+    return null;
+  }
   const { trigger, allowTools, allowWriteDir } = value;
-  if (typeof trigger !== "string" || trigger.length === 0) return null;
+  if (typeof trigger !== "string" || trigger.length === 0) {
+    errors.push(`gatingModes["${name}"]: missing or empty trigger`);
+    return null;
+  }
   return {
     trigger,
-    allowTools: toStringArray(allowTools),
-    allowWriteDir: toStringArray(allowWriteDir),
+    allowTools: toStringArray(allowTools, errors, `gatingModes["${name}"].allowTools`),
+    allowWriteDir: toStringArray(allowWriteDir, errors, `gatingModes["${name}"].allowWriteDir`),
   };
 }
 
-function normalizeGatingModes(value: unknown): Record<string, GatingModeConfig> {
-  if (!isRecord(value)) return {};
+function normalizeGatingModes(value: unknown, errors: string[]): Record<string, GatingModeConfig> {
+  if (value === undefined) return {};
+  if (!isRecord(value)) {
+    errors.push(`gatingModes: expected an object, got ${typeof value}`);
+    return {};
+  }
   const modes: Record<string, GatingModeConfig> = {};
   for (const [name, mode] of Object.entries(value)) {
-    const normalized = normalizeGatingMode(mode);
+    const normalized = normalizeGatingMode(name, mode, errors);
     if (normalized) modes[name] = normalized;
   }
   return modes;
@@ -87,27 +136,53 @@ function normalizeGatingModes(value: unknown): Record<string, GatingModeConfig> 
 
 /**
  * Normalize raw configuration data into a fully-typed Config with defaults.
- * Invalid entries are dropped; this function never throws.
+ * Invalid entries are dropped and described in `errors`; this never throws.
  */
-export function normalizeConfig(data: unknown): Config {
-  const src = isRecord(data) ? data : {};
+export function normalizeConfig(data: unknown): ConfigLoadResult {
+  if (!isRecord(data)) {
+    return { config: DEFAULT_CONFIG, errors: [`config: expected an object, got ${typeof data}`] };
+  }
+
+  const errors: string[] = [];
+  const defaultPreset = data.defaultPreset;
+  if (
+    defaultPreset !== undefined &&
+    (typeof defaultPreset !== "string" || !isValidPresetName(defaultPreset))
+  ) {
+    errors.push(`defaultPreset: must be a string matching [a-z][a-z0-9_-]*`);
+  }
+
+  const toolGuide = data.toolGuide;
+  if (toolGuide !== undefined && !isRecord(toolGuide)) {
+    errors.push(`toolGuide: expected an object, got ${typeof toolGuide}`);
+  } else if (
+    isRecord(toolGuide) &&
+    toolGuide.enabled !== undefined &&
+    typeof toolGuide.enabled !== "boolean"
+  ) {
+    errors.push(`toolGuide.enabled: expected a boolean, got ${typeof toolGuide.enabled}`);
+  }
+
   return {
-    presets: normalizePresets(src.presets),
-    defaultPreset:
-      typeof src.defaultPreset === "string" && isValidPresetName(src.defaultPreset)
-        ? src.defaultPreset
-        : undefined,
-    toolGuide:
-      isRecord(src.toolGuide) && typeof src.toolGuide.enabled === "boolean"
-        ? { enabled: src.toolGuide.enabled }
-        : { enabled: true },
-    subagentEnvVars: toStringArray(src.subagentEnvVars),
-    gatingModes: normalizeGatingModes(src.gatingModes),
+    config: {
+      presets: normalizePresets(data.presets, errors),
+      defaultPreset:
+        typeof defaultPreset === "string" && isValidPresetName(defaultPreset)
+          ? defaultPreset
+          : undefined,
+      toolGuide:
+        isRecord(toolGuide) && typeof toolGuide.enabled === "boolean"
+          ? { enabled: toolGuide.enabled }
+          : { enabled: true },
+      subagentEnvVars: toStringArray(data.subagentEnvVars, errors, "subagentEnvVars"),
+      gatingModes: normalizeGatingModes(data.gatingModes, errors),
+    },
+    errors,
   };
 }
 
 /** Load and normalize the config file from an agent directory. */
-export async function loadConfigFrom(agentDir: string): Promise<Config> {
+export async function loadConfigFrom(agentDir: string): Promise<ConfigLoadResult> {
   const configPath = join(agentDir, CONFIG_FILE_NAME);
   let raw: string;
   try {

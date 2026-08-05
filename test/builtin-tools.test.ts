@@ -7,6 +7,7 @@ import {
   BUILTIN_SUBAGENT_ENV_VARS,
   isSubagentEnv,
   toggleBuiltinTools,
+  toolsSwitchCompletions,
   validateBuiltinTools,
 } from "../extension/builtin-tools.ts";
 
@@ -92,4 +93,41 @@ test("validateBuiltinTools handles empty and all-invalid lists", () => {
   assert.equal(allInvalid.ok, false);
   assert.deepEqual(allInvalid.tools, []);
   assert.deepEqual(allInvalid.invalid, ["nope", "wat"]);
+});
+
+test("toolsSwitchCompletions suggests subcommands with trailing space", () => {
+  const items = toolsSwitchCompletions("");
+  assert.deepEqual(
+    items?.map((i) => i.value),
+    ["enable ", "disable "],
+  );
+  const partial = toolsSwitchCompletions("dis");
+  assert.deepEqual(partial?.map((i) => i.value), ["disable "]);
+  const invalid = toolsSwitchCompletions("foo");
+  assert.equal(invalid, null);
+});
+
+test("toolsSwitchCompletions selects a subcommand then completes tool names", () => {
+  // Select "enable " -> next pass must fall through to the tool-name stage.
+  const afterSelect = toolsSwitchCompletions("enable ");
+  assert.ok(afterSelect && afterSelect.length === 7, "tool names offered after subcommand");
+  assert.deepEqual(afterSelect[0], { value: "enable read", label: "read" });
+
+  const partial = toolsSwitchCompletions("enable r");
+  assert.deepEqual(partial, [{ value: "enable read", label: "read" }]);
+
+  const disable = toolsSwitchCompletions("disable g");
+  assert.deepEqual(disable, [{ value: "disable grep", label: "grep" }]);
+});
+
+test("toolsSwitchCompletions handles edge prefixes", () => {
+  // Full subcommand typed without space still suggests the spaced value.
+  const typed = toolsSwitchCompletions("enable");
+  assert.deepEqual(typed?.map((i) => i.value), ["enable "]);
+  // Subcommand-like but not valid.
+  assert.equal(toolsSwitchCompletions("enablex"), null);
+  // Unknown subcommand with a second word.
+  assert.equal(toolsSwitchCompletions("foo bar"), null);
+  // No tool matches.
+  assert.equal(toolsSwitchCompletions("enable readx"), null);
 });

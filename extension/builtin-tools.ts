@@ -148,20 +148,22 @@ export function formatToolsStatus(
     .join("\n");
 }
 
-function toolsSwitchCompletions(prefix: string): AutocompleteItem[] | null {
-  const trimmed = prefix.trim();
-  const parts = trimmed.split(/\s+/);
+export function toolsSwitchCompletions(prefix: string): AutocompleteItem[] | null {
+  const parts = prefix.split(/\s+/);
   const subcommands = ["enable", "disable"];
   if (parts.length <= 1 || (parts[0] !== "enable" && parts[0] !== "disable")) {
-    const items = subcommands.map((sub) => ({ value: sub, label: sub }));
-    const filtered = items.filter((item) => item.value.startsWith(trimmed));
+    // Subcommand stage: values carry a trailing space so the next completion
+    // pass falls through to the tool-name stage (prefix is not trimmed, so
+    // the space survives the round-trip).
+    const items = subcommands.map((sub) => ({ value: sub + " ", label: sub }));
+    const filtered = items.filter((item) => item.value.startsWith(prefix));
     return filtered.length > 0 ? filtered : null;
   }
   const items = BUILTIN_TOOL_NAMES.map((tool) => ({
     value: `${parts[0]} ${tool}`,
     label: tool,
   }));
-  const filtered = items.filter((item) => item.value.startsWith(trimmed));
+  const filtered = items.filter((item) => item.value.startsWith(prefix));
   return filtered.length > 0 ? filtered : null;
 }
 

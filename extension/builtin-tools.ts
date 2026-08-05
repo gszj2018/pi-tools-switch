@@ -235,12 +235,12 @@ export function toolsSwitchCompletions(prefix: string): AutocompleteItem[] | nul
   // (subcommand + already-chosen tools + the new tool) because the
   // autocomplete replaces the whole prefix. Already-chosen tools are excluded
   // so each tool can be added at most once.
-  const used = new Set(completeTokens);
-  if (isBuiltinToolName(last)) used.add(last);
+  const selected = isBuiltinToolName(last) ? [...completeTokens, last] : completeTokens;
+  const used = new Set(selected);
   const remaining = BUILTIN_TOOL_NAMES.filter((tool) => !used.has(tool));
   if (remaining.length === 0) return null;
   const items = remaining.map((tool) => ({
-    value: `${first} ${[...used, tool].join(" ")}`,
+    value: `${first} ${[...selected, tool].join(" ")}`,
     label: tool,
   }));
   const filtered = items.filter((item) => item.value.startsWith(prefix));

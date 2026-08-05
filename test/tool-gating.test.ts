@@ -172,6 +172,6 @@ test("decideToolCall blocks write with missing or non-string path", () => {
 });
 
 test("formatModeStatus renders active and inactive", () => {
-  assert.equal(formatModeStatus(undefined), "[MODE: -]");
-  assert.equal(formatModeStatus("plan"), "[MODE: plan]");
+  assert.equal(formatModeStatus(undefined), "[M: -]");
+  assert.equal(formatModeStatus("plan"), "[M: plan]");
 });

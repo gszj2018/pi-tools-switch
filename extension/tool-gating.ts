@@ -39,9 +39,9 @@ export function matchTrigger(
   return undefined;
 }
 
-/** Status bar text: [MODE: <name>] or [MODE: -]. */
+/** Status bar text: [M: <name>] or [M: -]. */
 export function formatModeStatus(name: string | undefined): string {
-  return `[MODE: ${name ?? "-"}]`;
+  return `[M: ${name ?? "-"}]`;
 }
 
 /** Blocked reason for write/edit when the target is outside allowWriteDir. */

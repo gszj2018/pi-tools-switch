@@ -218,12 +218,13 @@ export function toolsSwitchCompletions(prefix: string): AutocompleteItem[] | nul
   if (completeTokens.some((tool) => !isBuiltinToolName(tool))) return null;
 
   // A complete tool name without a trailing space is still being typed (or
-  // just finished): complete it without appending. The user must type a space
-  // to confirm it and move into the append stage. This also avoids the pi-tui
-  // cursor bug that leaves completions unresponsive after selection.
+  // just finished): complete it without appending, keeping any earlier tools
+  // in the accumulated value. The user must type a space to confirm it and
+  // move into the append stage. This also avoids the pi-tui cursor bug that
+  // leaves completions unresponsive after selection.
   if (isBuiltinToolName(last) && !prefix.endsWith(" ")) {
     const items = BUILTIN_TOOL_NAMES.filter((tool) => tool.startsWith(last)).map((tool) => ({
-      value: `${first} ${tool}`,
+      value: `${first} ${[...completeTokens, tool].join(" ")}`,
       label: tool,
     }));
     const filtered = items.filter((item) => item.value.startsWith(prefix));

@@ -132,9 +132,11 @@ test("toolsSwitchCompletions supports appending multiple tools", () => {
   // Complete tool name without a trailing space -> single-tool completion only.
   const noSpace = toolsSwitchCompletions("enable read");
   assert.deepEqual(noSpace, [{ value: "enable read", label: "read" }]);
-  // No trailing space after the last complete tool -> no appends; the user
-  // must type a space to confirm and continue.
-  assert.equal(toolsSwitchCompletions("enable read write"), null);
+  // Multi-tool: last complete tool without a trailing space keeps earlier
+  // tools in the accumulated value (still no appends).
+  assert.deepEqual(toolsSwitchCompletions("enable read write"), [
+    { value: "enable read write", label: "write" },
+  ]);
   // With a trailing space -> append remaining tools.
   const appendMore = toolsSwitchCompletions("enable read write ");
   assert.ok(appendMore?.some((i) => i.value === "enable read write bash"));

@@ -10,6 +10,7 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import {
   BUILTIN_TOOL_NAMES,
   BUILTIN_TOOL_SET,
+  OUTPUT_ENTRY_TYPE,
   isBuiltinToolName,
   isValidPresetName,
   type BuiltinToolName,
@@ -17,7 +18,6 @@ import {
 import type { Config } from "./config.ts";
 
 export const STATUS_BAR_KEY = "pi-tools-switch-status";
-export const OUTPUT_ENTRY_TYPE = "pi-tools-switch-output";
 
 const STATUS_CHARS: Record<BuiltinToolName, string> = {
   read: "R",

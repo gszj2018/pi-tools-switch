@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BUILTIN_SUBAGENT_ENV_VARS,
+  getEffectiveDefaultPreset,
   isSubagentEnv,
   toggleBuiltinTools,
   toolsSwitchCompletions,
@@ -99,7 +100,7 @@ test("toolsSwitchCompletions suggests subcommands with trailing space", () => {
   const items = toolsSwitchCompletions("");
   assert.deepEqual(
     items?.map((i) => i.value),
-    ["enable ", "disable "],
+    ["enable ", "disable ", "default "],
   );
   const partial = toolsSwitchCompletions("dis");
   assert.deepEqual(partial?.map((i) => i.value), ["disable "]);
@@ -130,4 +131,18 @@ test("toolsSwitchCompletions handles edge prefixes", () => {
   assert.equal(toolsSwitchCompletions("foo bar"), null);
   // No tool matches.
   assert.equal(toolsSwitchCompletions("enable readx"), null);
+});
+
+test("toolsSwitchCompletions suggests the default subcommand", () => {
+  const items = toolsSwitchCompletions("def");
+  assert.deepEqual(items, [{ value: "default ", label: "default" }]);
+});
+
+test("getEffectiveDefaultPreset returns the preset only when effective", () => {
+  const presets = { explore: ["read", "find", "grep", "ls"] };
+  assert.equal(getEffectiveDefaultPreset("explore", presets, false), "explore");
+  assert.equal(getEffectiveDefaultPreset("explore", presets, true), undefined); // subagent skips
+  assert.equal(getEffectiveDefaultPreset(undefined, presets, false), undefined); // not configured
+  assert.equal(getEffectiveDefaultPreset("nope", presets, false), undefined); // does not exist
+  assert.equal(getEffectiveDefaultPreset("read", presets, false), "read"); // built-in preset
 });

@@ -3,7 +3,12 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeStatusBar, formatPresetLine, formatToolsStatus } from "../extension/builtin-tools.ts";
+import {
+  computeStatusBar,
+  formatDefaultStatus,
+  formatPresetLine,
+  formatToolsStatus,
+} from "../extension/builtin-tools.ts";
 import { formatGuideStatus } from "../extension/system-prompt.ts";
 
 test("computeStatusBar renders [RWEBFGL] when all built-in tools are active", () => {
@@ -49,4 +54,9 @@ test("formatToolsStatus marks on/off and built-in kind", () => {
 test("formatGuideStatus renders enabled and disabled", () => {
   assert.equal(formatGuideStatus(true), "[+G]");
   assert.equal(formatGuideStatus(false), "[-G]");
+});
+
+test("formatDefaultStatus renders active and inactive", () => {
+  assert.equal(formatDefaultStatus(undefined), "[D: -]");
+  assert.equal(formatDefaultStatus("explore"), "[D: explore]");
 });

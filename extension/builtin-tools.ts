@@ -132,6 +132,24 @@ export function formatPresetLine(name: string, tools: readonly string[]): string
   return `${computeStatusBar(tools)} ${name}`;
 }
 
+/** Status bar text for the active default preset: [D: <name>] or [D: -]. */
+export function formatDefaultStatus(name: string | undefined): string {
+  return `[D: ${name ?? "-"}]`;
+}
+
+/**
+ * The effective default preset for this session: undefined when running as a
+ * subagent, no defaultPreset is configured, or the preset does not exist.
+ */
+export function getEffectiveDefaultPreset(
+  defaultPreset: string | undefined,
+  userPresets: Record<string, string[]>,
+  subagent: boolean,
+): string | undefined {
+  if (subagent || defaultPreset === undefined) return undefined;
+  return mergePresets(userPresets)[defaultPreset] ? defaultPreset : undefined;
+}
+
 /** Text block listing all tools with their on/off state. */
 export function formatToolsStatus(
   activeTools: readonly string[],
@@ -149,7 +167,7 @@ export function formatToolsStatus(
 
 export function toolsSwitchCompletions(prefix: string): AutocompleteItem[] | null {
   const parts = prefix.split(/\s+/);
-  const subcommands = ["enable", "disable"];
+  const subcommands = ["enable", "disable", "default"];
   if (parts.length <= 1 || (parts[0] !== "enable" && parts[0] !== "disable")) {
     // Subcommand stage: values carry a trailing space so the next completion
     // pass falls through to the tool-name stage (prefix is not trimmed, so
@@ -175,8 +193,15 @@ function presetNameCompletions(prefix: string, config: Config): AutocompleteItem
 
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   const refreshStatus = (ctx: ExtensionContext): void => {
-    ctx.ui.setStatus(STATUS_BAR_KEY, computeStatusBar(pi.getActiveTools()));
+    ctx.ui.setStatus(
+      STATUS_BAR_KEY,
+      `${computeStatusBar(pi.getActiveTools())} ${formatDefaultStatus(activeDefaultPreset)}`,
+    );
   };
+
+  // Effective default preset cached at session start (undefined when not
+  // configured, invalid, or skipped for subagents).
+  let activeDefaultPreset: string | undefined;
 
   const applyPresetByName = (name: string): { next: string[]; ok: boolean; error?: string } => {
     const presets = mergePresets(getConfig().presets);
@@ -188,13 +213,31 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   };
 
   pi.registerCommand("tools-switch", {
-    description: "Show tool status, or enable/disable built-in tools: /tools-switch [enable|disable <tool> ...]",
+    description:
+      "Show tool status, or run a subcommand: enable <tool> ... | disable <tool> ... | default",
     getArgumentCompletions: toolsSwitchCompletions,
     handler: async (args, ctx) => {
       const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
       const [sub, ...tools] = parts;
       if (!sub) {
         ctx.ui.notify(formatToolsStatus(pi.getActiveTools(), pi.getAllTools()), "info");
+        return;
+      }
+      if (sub === "default") {
+        if (!activeDefaultPreset) {
+          ctx.ui.notify("No default preset configured", "warning");
+          return;
+        }
+        const result = applyPresetByName(activeDefaultPreset);
+        if (!result.ok) {
+          ctx.ui.notify(result.error ?? "Unknown preset", "error");
+          return;
+        }
+        refreshStatus(ctx);
+        ctx.ui.notify(
+          `Restored preset "${activeDefaultPreset}" (${computeStatusBar(result.next)})`,
+          "info",
+        );
         return;
       }
       if (sub !== "enable" && sub !== "disable") {
@@ -258,16 +301,21 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   pi.on("session_start", async (_event, ctx) => {
     const config = getConfig();
     const subagent = isSubagentEnv(process.env, config.subagentEnvVars);
-    if (!subagent && config.defaultPreset) {
-      const result = applyPresetByName(config.defaultPreset);
+    const effective = getEffectiveDefaultPreset(config.defaultPreset, config.presets, subagent);
+    activeDefaultPreset = effective;
+    if (effective) {
+      const result = applyPresetByName(effective);
       if (result.ok) {
         ctx.ui.notify(
-          `Preset "${config.defaultPreset}" applied (${computeStatusBar(result.next)})`,
+          `Preset "${effective}" applied (${computeStatusBar(result.next)})`,
           "info",
         );
       } else {
         ctx.ui.notify(result.error ?? "Unknown preset", "error");
       }
+    } else if (!subagent && config.defaultPreset) {
+      // Configured default preset does not exist.
+      ctx.ui.notify(`Unknown preset: ${config.defaultPreset}`, "error");
     }
     refreshStatus(ctx);
   });

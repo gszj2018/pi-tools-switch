@@ -323,12 +323,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     effectiveDefaultPreset = effective.preset;
     if (effective.preset) {
       const result = applyPresetByName(effective.preset);
-      if (result.ok) {
-        ctx.ui.notify(
-          `Preset "${effective.preset}" applied (${computeStatusBar(result.next)})`,
-          "info",
-        );
-      } else {
+      if (!result.ok) {
         ctx.ui.notify(result.error ?? "Unknown preset", "error");
       }
     } else if (effective.invalid) {

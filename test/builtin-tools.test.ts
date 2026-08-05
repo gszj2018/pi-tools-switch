@@ -97,12 +97,9 @@ test("validateBuiltinTools handles empty and all-invalid lists", () => {
   assert.deepEqual(allInvalid.invalid, ["nope", "wat"]);
 });
 
-test("toolsSwitchCompletions suggests subcommands with trailing space", () => {
+test("toolsSwitchCompletions suggests subcommands with appropriate spacing", () => {
   const items = toolsSwitchCompletions("");
-  assert.deepEqual(
-    items?.map((i) => i.value),
-    ["enable ", "disable ", "default "],
-  );
+  assert.deepEqual(items?.map((i) => i.value), ["enable ", "disable ", "default"]);
   const partial = toolsSwitchCompletions("dis");
   assert.deepEqual(partial?.map((i) => i.value), ["disable "]);
   const invalid = toolsSwitchCompletions("foo");
@@ -122,6 +119,31 @@ test("toolsSwitchCompletions selects a subcommand then completes tool names", ()
   assert.deepEqual(disable, [{ value: "disable grep", label: "grep" }]);
 });
 
+test("toolsSwitchCompletions supports appending multiple tools", () => {
+  // After selecting one tool, further completions accumulate the full list.
+  const afterFirst = toolsSwitchCompletions("enable read ");
+  assert.equal(afterFirst?.length, 6);
+  assert.ok(!afterFirst?.some((i) => i.label === "read"), "already-selected tool excluded");
+  assert.deepEqual(afterFirst?.[0], { value: "enable read write", label: "write" });
+
+  const partial = toolsSwitchCompletions("enable read w");
+  assert.deepEqual(partial, [{ value: "enable read write", label: "write" }]);
+
+  // Complete tool name without a trailing space -> single-tool completion only.
+  const noSpace = toolsSwitchCompletions("enable read");
+  assert.deepEqual(noSpace, [{ value: "enable read", label: "read" }]);
+  // No trailing space after the last complete tool -> no appends; the user
+  // must type a space to confirm and continue.
+  assert.equal(toolsSwitchCompletions("enable read write"), null);
+  // With a trailing space -> append remaining tools.
+  const appendMore = toolsSwitchCompletions("enable read write ");
+  assert.ok(appendMore?.some((i) => i.value === "enable read write bash"));
+  assert.ok(!appendMore?.some((i) => i.label === "read" || i.label === "write"));
+
+  // All tools selected -> no more suggestions.
+  assert.equal(toolsSwitchCompletions("enable read write edit bash find grep ls "), null);
+});
+
 test("toolsSwitchCompletions handles edge prefixes", () => {
   // Full subcommand typed without space still suggests the spaced value.
   const typed = toolsSwitchCompletions("enable");
@@ -130,13 +152,13 @@ test("toolsSwitchCompletions handles edge prefixes", () => {
   assert.equal(toolsSwitchCompletions("enablex"), null);
   // Unknown subcommand with a second word.
   assert.equal(toolsSwitchCompletions("foo bar"), null);
-  // No tool matches.
+  // Unknown tool name typed after a valid subcommand.
   assert.equal(toolsSwitchCompletions("enable readx"), null);
 });
 
-test("toolsSwitchCompletions suggests the default subcommand", () => {
+test("toolsSwitchCompletions suggests the default subcommand without trailing space", () => {
   const items = toolsSwitchCompletions("def");
-  assert.deepEqual(items, [{ value: "default ", label: "default" }]);
+  assert.deepEqual(items, [{ value: "default", label: "default" }]);
 });
 
 test("getEffectiveDefaultPreset returns the preset only when effective", () => {

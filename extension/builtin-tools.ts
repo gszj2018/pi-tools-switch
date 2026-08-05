@@ -181,17 +181,65 @@ export function formatToolsStatus(
 
 export function toolsSwitchCompletions(prefix: string): AutocompleteItem[] | null {
   const parts = prefix.split(/\s+/);
-  const subcommands = ["enable", "disable", "default"];
-  if (parts.length <= 1 || (parts[0] !== "enable" && parts[0] !== "disable")) {
-    // Subcommand stage: values carry a trailing space so the next completion
-    // pass falls through to the tool-name stage (prefix is not trimmed, so
-    // the space survives the round-trip).
-    const items = subcommands.map((sub) => ({ value: sub + " ", label: sub }));
+  const first = parts[0] ?? "";
+  if (parts.length <= 1) {
+    // Subcommand stage: enable/disable carry a trailing space (more arguments
+    // follow), default does not. The prefix is not trimmed so the space
+    // survives the round-trip into the tool stage.
+    const items = [
+      { value: "enable ", label: "enable" },
+      { value: "disable ", label: "disable" },
+      { value: "default", label: "default" },
+    ];
     const filtered = items.filter((item) => item.value.startsWith(prefix));
     return filtered.length > 0 ? filtered : null;
   }
-  const items = BUILTIN_TOOL_NAMES.map((tool) => ({
-    value: `${parts[0]} ${tool}`,
+  if (first !== "enable" && first !== "disable") return null;
+
+  // Tool stage: append-only completion. Each value carries the full
+  // accumulated argument list (subcommand + already-chosen tools + the new
+  // tool) because the autocomplete replaces the whole prefix. Already-chosen
+  // tools are excluded so each tool can be added at most once. All tokens
+  // except the last one must be complete valid tool names; the last token is
+  // treated as an in-progress prefix and only used for filtering.
+  const tokens = parts.slice(1);
+  // Drop only the trailing empty token produced by a trailing space.
+  while (tokens.length > 0 && tokens[tokens.length - 1] === "") tokens.pop();
+  if (tokens.length === 0) {
+    const items = BUILTIN_TOOL_NAMES.map((tool) => ({
+      value: `${first} ${tool}`,
+      label: tool,
+    }));
+    const filtered = items.filter((item) => item.value.startsWith(prefix));
+    return filtered.length > 0 ? filtered : null;
+  }
+  const completeTokens = tokens.slice(0, -1);
+  const last = tokens[tokens.length - 1];
+  if (completeTokens.some((tool) => !isBuiltinToolName(tool))) return null;
+
+  // A complete tool name without a trailing space is still being typed (or
+  // just finished): complete it without appending. The user must type a space
+  // to confirm it and move into the append stage. This also avoids the pi-tui
+  // cursor bug that leaves completions unresponsive after selection.
+  if (isBuiltinToolName(last) && !prefix.endsWith(" ")) {
+    const items = BUILTIN_TOOL_NAMES.filter((tool) => tool.startsWith(last)).map((tool) => ({
+      value: `${first} ${tool}`,
+      label: tool,
+    }));
+    const filtered = items.filter((item) => item.value.startsWith(prefix));
+    return filtered.length > 0 ? filtered : null;
+  }
+
+  // Append stage: each value carries the full accumulated argument list
+  // (subcommand + already-chosen tools + the new tool) because the
+  // autocomplete replaces the whole prefix. Already-chosen tools are excluded
+  // so each tool can be added at most once.
+  const used = new Set(completeTokens);
+  if (isBuiltinToolName(last)) used.add(last);
+  const remaining = BUILTIN_TOOL_NAMES.filter((tool) => !used.has(tool));
+  if (remaining.length === 0) return null;
+  const items = remaining.map((tool) => ({
+    value: `${first} ${[...used, tool].join(" ")}`,
     label: tool,
   }));
   const filtered = items.filter((item) => item.value.startsWith(prefix));

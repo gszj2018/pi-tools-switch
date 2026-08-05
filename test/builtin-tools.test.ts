@@ -141,9 +141,28 @@ test("toolsSwitchCompletions suggests the default subcommand", () => {
 
 test("getEffectiveDefaultPreset returns the preset only when effective", () => {
   const presets = mergePresets({ explore: ["read", "find", "grep", "ls"] });
-  assert.equal(getEffectiveDefaultPreset("explore", presets, false), "explore");
-  assert.equal(getEffectiveDefaultPreset("explore", presets, true), undefined); // subagent skips
-  assert.equal(getEffectiveDefaultPreset(undefined, presets, false), undefined); // not configured
-  assert.equal(getEffectiveDefaultPreset("nope", presets, false), undefined); // does not exist
-  assert.equal(getEffectiveDefaultPreset("read", presets, false), "read"); // built-in preset
+  assert.deepEqual(getEffectiveDefaultPreset("explore", presets, false), {
+    preset: "explore",
+    invalid: false,
+  });
+  // Subagent skips even when configured.
+  assert.deepEqual(getEffectiveDefaultPreset("explore", presets, true), {
+    preset: undefined,
+    invalid: false,
+  });
+  // Not configured.
+  assert.deepEqual(getEffectiveDefaultPreset(undefined, presets, false), {
+    preset: undefined,
+    invalid: false,
+  });
+  // Configured but the preset does not exist -> invalid.
+  assert.deepEqual(getEffectiveDefaultPreset("nope", presets, false), {
+    preset: undefined,
+    invalid: true,
+  });
+  // Built-in preset works too.
+  assert.deepEqual(getEffectiveDefaultPreset("read", presets, false), {
+    preset: "read",
+    invalid: false,
+  });
 });

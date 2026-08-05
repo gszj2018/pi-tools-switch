@@ -1,8 +1,8 @@
 /**
  * Tool guide system prompt injection for pi-tools-switch.
  *
- * Caches toolGuide.enabled at session start into module-local state and owns
- * the "pi-tools-switch-guide" status bar ([+G] enabled / [-G] disabled).
+ * Caches toolGuide.enabled at load time into module-local state and owns the
+ * "pi-tools-switch-guide" status bar ([+G] enabled / [-G] disabled).
  * before_agent_start reads the cached value instead of the config.
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -18,11 +18,10 @@ export function formatGuideStatus(enabled: boolean): string {
 }
 
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {
-  // Cached from config at session start; matches the default until then.
-  let toolGuideEnabled = true;
+  // Cached from config at load time (rebuilt on extension reload).
+  const toolGuideEnabled = getConfig().toolGuide.enabled;
 
   pi.on("session_start", async (_event, ctx: ExtensionContext) => {
-    toolGuideEnabled = getConfig().toolGuide.enabled;
     ctx.ui.setStatus(GUIDE_STATUS_BAR_KEY, formatGuideStatus(toolGuideEnabled));
   });
 

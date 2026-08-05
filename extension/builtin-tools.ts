@@ -10,7 +10,6 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import {
   BUILTIN_TOOL_NAMES,
   BUILTIN_TOOL_SET,
-  OUTPUT_ENTRY_TYPE,
   isBuiltinToolName,
   isValidPresetName,
   type BuiltinToolName,
@@ -262,9 +261,10 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     if (!subagent && config.defaultPreset) {
       const result = applyPresetByName(config.defaultPreset);
       if (result.ok) {
-        pi.appendEntry(OUTPUT_ENTRY_TYPE, {
-          lines: [`Applied preset "${config.defaultPreset}" (${computeStatusBar(result.next)})`],
-        });
+        ctx.ui.notify(
+          `Preset "${config.defaultPreset}" applied (${computeStatusBar(result.next)})`,
+          "info",
+        );
       } else {
         ctx.ui.notify(result.error ?? "Unknown preset", "error");
       }

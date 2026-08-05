@@ -7,7 +7,7 @@
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { READ_ONLY_TOOLS, OUTPUT_ENTRY_TYPE, isPathInDirs, resolveDir } from "./utils.ts";
+import { READ_ONLY_TOOLS, isPathInDirs, resolveDir } from "./utils.ts";
 import type { Config, GatingModeConfig } from "./config.ts";
 
 export const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
@@ -153,7 +153,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
           details: Record<string, unknown>;
           terminate: true;
         } => {
-          pi.appendEntry(OUTPUT_ENTRY_TYPE, { lines: [params.summary] });
+          ctx.ui.notify(params.summary, "info");
           return {
             content: [{ type: "text", text: params.summary }],
             details: {},

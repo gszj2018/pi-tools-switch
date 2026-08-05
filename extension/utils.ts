@@ -19,9 +19,6 @@ export const BUILTIN_TOOL_NAMES: readonly BuiltinToolName[] = [
   "ls",
 ];
 
-/** Custom entry type rendered by the extension's entry renderer (index.ts). */
-export const OUTPUT_ENTRY_TYPE = "pi-tools-switch-output";
-
 /** Set form of BUILTIN_TOOL_NAMES for membership checks. */
 export const BUILTIN_TOOL_SET: ReadonlySet<string> = new Set(BUILTIN_TOOL_NAMES);
 

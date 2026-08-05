@@ -1,15 +1,14 @@
 /**
  * Extension entry for pi-tools-switch.
  *
- * Loads the config at startup (falling back to defaults on failure), wires
- * the entry renderer, and injects the getConfig callback into each feature
- * module. Feature modules own their state and status bars independently.
+ * Loads the config at startup (falling back to defaults on failure), and
+ * injects the getConfig callback into each feature module. Feature modules
+ * own their state, status bars, and notifications independently; all text
+ * feedback goes through ctx.ui.notify.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 import { CONFIG_FILE_NAME, DEFAULT_CONFIG, loadConfigFrom, type Config } from "./config.ts";
-import { OUTPUT_ENTRY_TYPE } from "./utils.ts";
 import { register as registerBuiltinTools } from "./builtin-tools.ts";
 import { register as registerToolGating } from "./tool-gating.ts";
 import { register as registerSystemPrompt } from "./system-prompt.ts";
@@ -34,14 +33,6 @@ export default async function (pi: ExtensionAPI): Promise<void> {
   }
 
   const getConfig = (): Config => config;
-
-  // Renders preset auto-activation notices and finish-tool summaries.
-  pi.registerEntryRenderer(OUTPUT_ENTRY_TYPE, (entry, _options, theme) => {
-    const data = entry.data as { lines?: unknown } | undefined;
-    const lines = Array.isArray(data?.lines) ? data.lines.map(String) : [];
-    const text = lines.length > 0 ? lines.join("\n") : JSON.stringify(entry.data);
-    return new Text(theme.fg("accent", text));
-  });
 
   registerBuiltinTools(pi, getConfig);
   registerToolGating(pi, getConfig);

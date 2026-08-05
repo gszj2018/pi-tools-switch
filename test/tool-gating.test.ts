@@ -213,6 +213,9 @@ test("buildModeMessage states the active mode, allowed tools, and write dirs", (
     `notes write dirs: ${msg}`,
   );
   assert.ok(msg.includes(ABS_PLANS_DIR), `has abs dir: ${msg}`);
+  // Paths are wrapped in backticks so markdown renders them as inline code
+  // and the backslashes survive (plain text would escape `\.` to `.`).
+  assert.ok(msg.includes(`\`${ABS_PLANS_DIR}\``), `path wrapped in backticks: ${msg}`);
   assert.ok(msg.includes("Other tools are blocked"), `notes blocking: ${msg}`);
 });
 

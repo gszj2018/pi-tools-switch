@@ -87,7 +87,9 @@ export function buildModeMessage(
   ];
   let text = `You are in ${modeName} mode. Allowed tools: ${allowed.join(", ")}`;
   if (mode.allowWriteDir.length > 0) {
-    const dirs = mode.allowWriteDir.map((dir) => resolveDir(dir, cwd)).join(", ");
+    // Backticks render the path as an inline code span, which preserves the
+    // backslashes (plain text would treat `\.` as a CommonMark escape).
+    const dirs = mode.allowWriteDir.map((dir) => `\`${resolveDir(dir, cwd)}\``).join(", ");
     text += `. write/edit are allowed only in: ${dirs}`;
   } else {
     text += `. write/edit are not allowed`;

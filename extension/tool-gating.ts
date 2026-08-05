@@ -70,6 +70,45 @@ export function buildBlockReason(modeName: string, mode: GatingModeConfig): stri
   return reason;
 }
 
+/**
+ * Mode-state message text injected before an agent turn: states the active
+ * mode and its restrictions, or that no gating mode is active.
+ */
+export function buildModeMessage(
+  modeName: string | undefined,
+  mode: GatingModeConfig | undefined,
+  cwd: string,
+): string {
+  if (!modeName || !mode) {
+    return `You are not currently in any gating mode. You may call any available tool.`;
+  }
+  const allowed = [
+    ...new Set([`finish_${modeName}_mode`, ...READ_ONLY_TOOLS, ...mode.allowTools]),
+  ];
+  let text = `You are in ${modeName} mode. Allowed tools: ${allowed.join(", ")}`;
+  if (mode.allowWriteDir.length > 0) {
+    const dirs = mode.allowWriteDir.map((dir) => resolveDir(dir, cwd)).join(", ");
+    text += `. write/edit are allowed only in: ${dirs}`;
+  } else {
+    text += `. write/edit are not allowed`;
+  }
+  text += `. Other tools are blocked.`;
+  return text;
+}
+
+/**
+ * Whether a mode-state message should be injected for the current turn:
+ * always on the first turn after session start (no reported mode yet), and
+ * whenever the active mode differs from the mode reported by the previous
+ * injected message.
+ */
+export function shouldInjectModeMessage(
+  lastReportedModeName: string | undefined | null,
+  activeModeName: string | undefined,
+): boolean {
+  return lastReportedModeName === null || activeModeName !== lastReportedModeName;
+}
+
 interface GatingDecision {
   allowed: boolean;
   reason?: string;
@@ -108,6 +147,13 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
 
   let activeModeName: string | undefined;
   let activeMode: GatingModeConfig | undefined;
+  // Mode reported by the last injected mode-state message; null = no message
+  // has been injected yet (first turn after session start).
+  let lastReportedModeName: string | undefined | null = null;
+  // Guard flag: raised once the mode is confirmed at before_agent_start and
+  // cleared at agent_settled. While raised, input events (e.g. steering
+  // input) must not change the mode.
+  let modeGuardActive = false;
 
   const getFinishToolNames = (): string[] =>
     Object.keys(modes).map((name) => `finish_${name}_mode`);
@@ -192,11 +238,20 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   }
 
   pi.on("session_start", async (_event, ctx) => {
-    // Reset gating state through the single state-change entry point.
+    // New session: no reported mode yet and the guard is down; reset through
+    // the single state-change entry point.
+    modeGuardActive = false;
+    lastReportedModeName = null;
     setMode(undefined, ctx);
   });
 
   pi.on("input", async (event, ctx) => {
+    // While the guard is raised (an agent run is in progress), input events
+    // such as steering must not change the mode.
+    if (modeGuardActive) {
+      refreshStatus(ctx);
+      return;
+    }
     const name = matchTrigger(event.text, modes);
     if (name) setMode(name, ctx);
     else refreshStatus(ctx);
@@ -217,7 +272,28 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     }
   });
 
+  pi.on("before_agent_start", async (_event, ctx) => {
+    // Confirm the mode for this turn and raise the guard so input during the
+    // run (e.g. steering) cannot change it.
+    modeGuardActive = true;
+    if (!shouldInjectModeMessage(lastReportedModeName, activeModeName)) return;
+    // Record the mode for the next turn's comparison right away; settle only
+    // cleans up (prevents stickiness) and no longer records.
+    lastReportedModeName = activeModeName;
+    return {
+      message: {
+        customType: "pi-tools-switch-mode",
+        content: buildModeMessage(activeModeName, activeMode, ctx.cwd),
+        display: true,
+      },
+    };
+  });
+
   pi.on("agent_settled", async (_event, ctx) => {
+    // Drop the guard and clean up: close the gate so the mode cannot stick
+    // across turns. The mode was already recorded at before_agent_start for
+    // the next turn.
+    modeGuardActive = false;
     setMode(undefined, ctx);
   });
 

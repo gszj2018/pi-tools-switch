@@ -22,4 +22,4 @@ You are now in **plan mode** - a read-only exploration and planning mode.
 
 When the plan is complete, call the `finish_plan_mode` tool with a `summary` describing the plan.
 
-> If `finish_plan_mode` is not available, you have already exited plan mode - proceed with normal execution.
+> The system reports your current mode through an injected message. If that message says you are not in any gating mode, you have already exited plan mode - proceed with normal execution.

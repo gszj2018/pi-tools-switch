@@ -15,16 +15,18 @@ export const TOOL_GUIDE_PROMPT = `When exploring or searching the project, prefe
 
 /**
  * Gating-mode guidance: helps the model understand tool gating modes and how
- * to interact with the per-mode finish tool (finish_<name>_mode).
+ * to interact with the per-mode finish tool (finish_<name>_mode). The current
+ * mode is always reported by an injected message, never inferred from tool
+ * availability.
  */
 export const GATING_MODE_GUIDANCE_PROMPT = `This coding assistant has several tool gating modes; while a specific mode is active, some tool calls are restricted.
 
 - Restricted tools still appear in the available tools list, but calls that do not comply with the active mode are intercepted by the system, which returns an error explaining the restriction.
 - A gating mode is enabled by a matching prompt, such as a skill invocation or a specific input prefix.
-- While a gating mode is active, a finish tool named \`finish_<name>_mode\` becomes available.
+- The system injects a message whenever your gating state changes: it states which mode you are in and its restrictions, or that you are not currently in any gating mode. Treat that message as the authoritative source for the current gating state; do not infer it from tool availability or from your memory of earlier turns, which may be stale.
+- While a gating mode is active, a finish tool named \`finish_<name>_mode\` becomes available, but its availability is not a reliable indicator of the current mode.
 - When you have completed the task and are ready to leave the gating mode, call that finish tool to ask the user. The user may then choose to exit the mode and end the current turn, or ask you to continue refining the work; in the latter case the conversation continues and the gating mode stays active.
-- The gating mode ends when the current conversation terminates, whether or not you called the finish tool. Re-entering a mode later always requires the user to enable it explicitly, and there may be no special prompt when it turns off.
-- The only reliable way to tell whether a gating mode is currently active is to check whether a \`finish_<name>_mode\` tool is available right now. Do not trust other sources of information (for example, your memory), which may reflect stale state.`;
+- The gating mode ends when the current conversation terminates, whether or not you called the finish tool, and the system then injects a message telling you that you are no longer in a gating mode. Re-entering a mode later always requires the user to enable it explicitly.`;
 
 /** Status bar text for the system prompt length: [SPL: <length>] or [SPL: -]. */
 export function formatSplStatus(length: number | undefined): string {

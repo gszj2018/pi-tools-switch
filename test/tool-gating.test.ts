@@ -6,10 +6,12 @@ import assert from "node:assert/strict";
 import {
   BUILTIN_GATING_MODES,
   buildBlockReason,
+  buildModeMessage,
   decideToolCall,
   formatModeStatus,
   matchTrigger,
   mergeGatingModes,
+  shouldInjectModeMessage,
 } from "../extension/tool-gating.ts";
 import { resolveDir } from "../extension/utils.ts";
 
@@ -174,4 +176,52 @@ test("decideToolCall blocks write with missing or non-string path", () => {
 test("formatModeStatus renders active and inactive", () => {
   assert.equal(formatModeStatus(undefined), "[M: -]");
   assert.equal(formatModeStatus("plan"), "[M: plan]");
+});
+
+test("shouldInjectModeMessage always injects on the first turn (no reported mode yet)", () => {
+  assert.equal(shouldInjectModeMessage(null, undefined), true);
+  assert.equal(shouldInjectModeMessage(null, "plan"), true);
+});
+
+test("shouldInjectModeMessage skips injection when the mode is unchanged", () => {
+  assert.equal(shouldInjectModeMessage(undefined, undefined), false);
+  assert.equal(shouldInjectModeMessage("plan", "plan"), false);
+});
+
+test("shouldInjectModeMessage injects when the mode changed vs the previously reported mode", () => {
+  assert.equal(shouldInjectModeMessage("plan", undefined), true); // left the mode
+  assert.equal(shouldInjectModeMessage(undefined, "plan"), true); // entered a mode
+  assert.equal(shouldInjectModeMessage("plan", "explore"), true); // switched modes
+});
+
+test("buildModeMessage reports no active mode and free tool use", () => {
+  assert.equal(
+    buildModeMessage(undefined, undefined, CWD),
+    "You are not currently in any gating mode. You may call any available tool.",
+  );
+});
+
+test("buildModeMessage states the active mode, allowed tools, and write dirs", () => {
+  const msg = buildModeMessage("plan", BUILTIN_PLAN, CWD);
+  assert.ok(msg.includes("You are in plan mode"), `states mode: ${msg}`);
+  assert.ok(
+    msg.includes("Allowed tools: finish_plan_mode, read, find, grep, ls"),
+    `lists allowed: ${msg}`,
+  );
+  assert.ok(
+    msg.includes("write/edit are allowed only in"),
+    `notes write dirs: ${msg}`,
+  );
+  assert.ok(msg.includes(ABS_PLANS_DIR), `has abs dir: ${msg}`);
+  assert.ok(msg.includes("Other tools are blocked"), `notes blocking: ${msg}`);
+});
+
+test("buildModeMessage appends allowTools and notes write/edit not allowed when empty", () => {
+  const mode = { trigger: "/x", allowTools: ["bash"], allowWriteDir: [] };
+  const msg = buildModeMessage("x", mode, CWD);
+  assert.ok(
+    msg.includes("Allowed tools: finish_x_mode, read, find, grep, ls, bash"),
+    `lists allowTools: ${msg}`,
+  );
+  assert.ok(msg.includes("write/edit are not allowed"), `notes write: ${msg}`);
 });

@@ -15,10 +15,6 @@ import { isBuiltinToolName, isValidPresetName, type BuiltinToolName } from "./ut
 
 export const CONFIG_FILE_NAME = "tools-switch.json";
 
-interface ToolGuideConfig {
-  enabled: boolean;
-}
-
 export interface GatingModeConfig {
   trigger: string;
   allowTools: string[];
@@ -30,8 +26,6 @@ export interface Config {
   presets: Record<string, string[]>;
   /** Preset to activate automatically at session start (optional). */
   defaultPreset?: string;
-  /** Tool guide system prompt configuration. */
-  toolGuide: ToolGuideConfig;
   /** Additional env vars that mark a subagent context. */
   subagentEnvVars: string[];
   /** User-defined gating modes. Names matching built-in modes override them. */
@@ -58,7 +52,6 @@ function deepFreeze<T>(value: T): T {
 
 export const DEFAULT_CONFIG: Config = deepFreeze({
   presets: {},
-  toolGuide: { enabled: true },
   subagentEnvVars: [],
   gatingModes: {},
 });
@@ -163,17 +156,6 @@ export function normalizeConfig(data: unknown): ConfigLoadResult {
     errors.push(`defaultPreset: must be a string matching [a-z][a-z0-9_-]*`);
   }
 
-  const toolGuide = data.toolGuide;
-  if (toolGuide !== undefined && !isRecord(toolGuide)) {
-    errors.push(`toolGuide: expected an object, got ${typeof toolGuide}`);
-  } else if (
-    isRecord(toolGuide) &&
-    toolGuide.enabled !== undefined &&
-    typeof toolGuide.enabled !== "boolean"
-  ) {
-    errors.push(`toolGuide.enabled: expected a boolean, got ${typeof toolGuide.enabled}`);
-  }
-
   return {
     config: deepFreeze({
       presets: normalizePresets(data.presets, errors),
@@ -181,10 +163,6 @@ export function normalizeConfig(data: unknown): ConfigLoadResult {
         typeof defaultPreset === "string" && isValidPresetName(defaultPreset)
           ? defaultPreset
           : undefined,
-      toolGuide:
-        isRecord(toolGuide) && typeof toolGuide.enabled === "boolean"
-          ? { enabled: toolGuide.enabled }
-          : { enabled: true },
       subagentEnvVars: toStringArray(data.subagentEnvVars, errors, "subagentEnvVars"),
       gatingModes: normalizeGatingModes(data.gatingModes, errors),
     }),

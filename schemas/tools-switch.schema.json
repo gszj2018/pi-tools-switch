@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://pi.dev/schemas/tools-switch.json",
   "title": "pi-tools-switch configuration",
-  "description": "Configuration for the pi-tools-switch extension: user-defined presets, default preset, tool guide system prompt, subagent environment variables, and custom gating modes. Loaded from <agentDir>/tools-switch.json.",
+  "description": "Configuration for the pi-tools-switch extension: user-defined presets, default preset, subagent environment variables, and custom gating modes. Loaded from <agentDir>/tools-switch.json.",
   "type": "object",
   "properties": {
     "presets": {
@@ -28,17 +28,6 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9_-]*$",
       "description": "Name of the preset to activate automatically at session start. Skipped when running inside a subagent."
-    },
-    "toolGuide": {
-      "type": "object",
-      "description": "Tool guide system prompt configuration.",
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "When true, injects the tool guide system prompt into every agent interaction (default: true)."
-        }
-      },
-      "additionalProperties": false
     },
     "subagentEnvVars": {
       "type": "array",

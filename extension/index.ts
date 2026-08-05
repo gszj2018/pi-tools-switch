@@ -36,5 +36,5 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 
   registerBuiltinTools(pi, getConfig);
   registerToolGating(pi, getConfig);
-  registerSystemPrompt(pi, getConfig);
+  registerSystemPrompt(pi);
 }

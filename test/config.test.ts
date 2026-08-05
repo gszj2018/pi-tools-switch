@@ -29,7 +29,6 @@ function assertErrors(result: ConfigLoadResult, expected: string[]): void {
 /** Field-level assertion for a fully defaulted config (defaultPreset key may be undefined). */
 function assertDefaultConfig(config: Config): void {
   assert.deepEqual(config.presets, {});
-  assert.equal(config.toolGuide.enabled, true);
   assert.deepEqual(config.subagentEnvVars, []);
   assert.deepEqual(config.gatingModes, {});
   assert.equal(config.defaultPreset, undefined);
@@ -46,7 +45,6 @@ async function cleanupTempDir(dir: string): Promise<void> {
 test("normalizeConfig({}) returns defaults with no errors", () => {
   const r = normalizeConfig({});
   assert.deepEqual(r.config.presets, {});
-  assert.equal(r.config.toolGuide.enabled, true);
   assert.deepEqual(r.config.subagentEnvVars, []);
   assert.deepEqual(r.config.gatingModes, {});
   assert.equal(r.config.defaultPreset, undefined);
@@ -63,7 +61,6 @@ test("normalizeConfig(valid example) normalizes and stays clean", () => {
   const r = normalizeConfig({
     presets: { "my-preset": ["read", "grep"] },
     defaultPreset: "my-preset",
-    toolGuide: { enabled: false },
     subagentEnvVars: ["PI_SUBAGENT"],
     gatingModes: {
       "plan-mode": { trigger: "/skill:plan-mode", allowTools: [], allowWriteDir: [".agents/plans"] },
@@ -72,7 +69,6 @@ test("normalizeConfig(valid example) normalizes and stays clean", () => {
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.config.presets["my-preset"], ["read", "grep"]);
   assert.equal(r.config.defaultPreset, "my-preset");
-  assert.equal(r.config.toolGuide.enabled, false);
   assert.deepEqual(r.config.subagentEnvVars, ["PI_SUBAGENT"]);
   assert.deepEqual(r.config.gatingModes["plan-mode"], {
     trigger: "/skill:plan-mode",
@@ -104,16 +100,6 @@ test("normalizeConfig rejects invalid defaultPreset", () => {
   const r = normalizeConfig({ defaultPreset: "Bad_Name" });
   assert.equal(r.config.defaultPreset, undefined);
   assertErrors(r, ["defaultPreset: must be a string matching [a-z][a-z0-9_-]*"]);
-});
-
-test("normalizeConfig validates toolGuide", () => {
-  const nonObject = normalizeConfig({ toolGuide: "yes" });
-  assert.equal(nonObject.config.toolGuide.enabled, true);
-  assertErrors(nonObject, ["toolGuide: expected an object, got string"]);
-
-  const nonBoolean = normalizeConfig({ toolGuide: { enabled: "yes" } });
-  assert.equal(nonBoolean.config.toolGuide.enabled, true);
-  assertErrors(nonBoolean, ["toolGuide.enabled: expected a boolean, got string"]);
 });
 
 test("normalizeConfig validates subagentEnvVars", () => {

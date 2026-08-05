@@ -103,13 +103,14 @@ export function decideToolCall(
 }
 
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {
+  // Merged gating modes cached once at load time (rebuilt on extension reload).
+  const modes = mergeGatingModes(getConfig().gatingModes);
+
   let activeModeName: string | undefined;
   let activeMode: GatingModeConfig | undefined;
 
-  const getModes = (): Record<string, GatingModeConfig> =>
-    mergeGatingModes(getConfig().gatingModes);
   const getFinishToolNames = (): string[] =>
-    Object.keys(getModes()).map((name) => `finish_${name}_mode`);
+    Object.keys(modes).map((name) => `finish_${name}_mode`);
 
   const refreshStatus = (ctx: ExtensionContext): void => {
     ctx.ui.setStatus(MODE_STATUS_BAR_KEY, formatModeStatus(activeModeName));
@@ -126,7 +127,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
       activeMode = undefined;
       removeFinishTools();
     } else {
-      const mode = getModes()[name];
+      const mode = modes[name];
       if (!mode) return;
       activeModeName = name;
       activeMode = mode;
@@ -178,7 +179,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   };
 
   // Register finish tools at extension load time (factory), once per instance.
-  for (const [name, mode] of Object.entries(getModes())) {
+  for (const [name, mode] of Object.entries(modes)) {
     registerFinishTool(name, mode);
   }
 
@@ -188,7 +189,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   });
 
   pi.on("input", async (event, ctx) => {
-    const name = matchTrigger(event.text, getModes());
+    const name = matchTrigger(event.text, modes);
     if (name) setMode(name, ctx);
     else refreshStatus(ctx);
   });
@@ -215,13 +216,12 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   pi.registerCommand("tools-mode-info", {
     description: "Show gating modes, or one mode's details: /tools-mode-info [<name>]",
     getArgumentCompletions: (prefix) => {
-      const items = Object.keys(getModes()).map((name) => ({ value: name, label: name }));
+      const items = Object.keys(modes).map((name) => ({ value: name, label: name }));
       const filtered = items.filter((item) => item.value.startsWith(prefix));
       return filtered.length > 0 ? filtered : null;
     },
     handler: async (args, ctx) => {
       const name = args?.trim() ?? "";
-      const modes = getModes();
       if (name === "") {
         const lines = Object.entries(modes).map(([n, mode]) => {
           const allowTools =

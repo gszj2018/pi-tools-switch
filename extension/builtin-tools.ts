@@ -139,15 +139,16 @@ export function formatDefaultStatus(name: string | undefined): string {
 
 /**
  * The effective default preset for this session: undefined when running as a
- * subagent, no defaultPreset is configured, or the preset does not exist.
+ * subagent, no defaultPreset is configured, or the preset does not exist in
+ * the given (already merged) presets.
  */
 export function getEffectiveDefaultPreset(
   defaultPreset: string | undefined,
-  userPresets: Record<string, string[]>,
+  presets: Record<string, readonly string[]>,
   subagent: boolean,
 ): string | undefined {
   if (subagent || defaultPreset === undefined) return undefined;
-  return mergePresets(userPresets)[defaultPreset] ? defaultPreset : undefined;
+  return presets[defaultPreset] ? defaultPreset : undefined;
 }
 
 /** Text block listing all tools with their on/off state. */
@@ -184,14 +185,19 @@ export function toolsSwitchCompletions(prefix: string): AutocompleteItem[] | nul
   return filtered.length > 0 ? filtered : null;
 }
 
-function presetNameCompletions(prefix: string, config: Config): AutocompleteItem[] | null {
-  const presets = mergePresets(config.presets);
+function presetNameCompletions(
+  prefix: string,
+  presets: Record<string, readonly string[]>,
+): AutocompleteItem[] | null {
   const items = Object.keys(presets).map((name) => ({ value: name, label: name }));
   const filtered = items.filter((item) => item.value.startsWith(prefix));
   return filtered.length > 0 ? filtered : null;
 }
 
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {
+  // Merged presets cached once at load time (rebuilt on extension reload).
+  const presets = mergePresets(getConfig().presets);
+
   const refreshStatus = (ctx: ExtensionContext): void => {
     ctx.ui.setStatus(
       STATUS_BAR_KEY,
@@ -204,7 +210,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   let activeDefaultPreset: string | undefined;
 
   const applyPresetByName = (name: string): { next: string[]; ok: boolean; error?: string } => {
-    const presets = mergePresets(getConfig().presets);
     const tools = presets[name];
     if (!tools) return { next: [], ok: false, error: `Unknown preset: ${name}` };
     const next = applyPreset(pi.getActiveTools(), tools);
@@ -272,9 +277,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
 
   pi.registerCommand("tools-preset", {
     description: "List presets, or apply one: /tools-preset <name>",
-    getArgumentCompletions: (prefix) => presetNameCompletions(prefix, getConfig()),
+    getArgumentCompletions: (prefix) => presetNameCompletions(prefix, presets),
     handler: async (args, ctx) => {
-      const presets = mergePresets(getConfig().presets);
       const name = args?.trim() ?? "";
       if (name === "") {
         const lines = Object.entries(presets).map(([n, tools]) => formatPresetLine(n, tools));
@@ -301,7 +305,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   pi.on("session_start", async (_event, ctx) => {
     const config = getConfig();
     const subagent = isSubagentEnv(process.env, config.subagentEnvVars);
-    const effective = getEffectiveDefaultPreset(config.defaultPreset, config.presets, subagent);
+    const effective = getEffectiveDefaultPreset(config.defaultPreset, presets, subagent);
     activeDefaultPreset = effective;
     if (effective) {
       const result = applyPresetByName(effective);

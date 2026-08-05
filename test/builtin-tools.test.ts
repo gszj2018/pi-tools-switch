@@ -7,6 +7,7 @@ import {
   BUILTIN_SUBAGENT_ENV_VARS,
   getEffectiveDefaultPreset,
   isSubagentEnv,
+  mergePresets,
   toggleBuiltinTools,
   toolsSwitchCompletions,
   validateBuiltinTools,
@@ -139,7 +140,7 @@ test("toolsSwitchCompletions suggests the default subcommand", () => {
 });
 
 test("getEffectiveDefaultPreset returns the preset only when effective", () => {
-  const presets = { explore: ["read", "find", "grep", "ls"] };
+  const presets = mergePresets({ explore: ["read", "find", "grep", "ls"] });
   assert.equal(getEffectiveDefaultPreset("explore", presets, false), "explore");
   assert.equal(getEffectiveDefaultPreset("explore", presets, true), undefined); // subagent skips
   assert.equal(getEffectiveDefaultPreset(undefined, presets, false), undefined); // not configured

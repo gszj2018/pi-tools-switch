@@ -89,7 +89,6 @@ export function decideToolCall(
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   let activeModeName: string | undefined;
   let activeMode: GatingModeConfig | undefined;
-  const registeredTools = new Set<string>();
 
   const getModes = (): Record<string, GatingModeConfig> =>
     mergeGatingModes(getConfig().gatingModes);
@@ -125,8 +124,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
 
   const registerFinishTool = (modeName: string, mode: GatingModeConfig): void => {
     const toolName = `finish_${modeName}_mode`;
-    if (registeredTools.has(toolName)) return;
-    registeredTools.add(toolName);
     pi.registerTool({
       name: toolName,
       label: `Finish ${modeName} mode`,
@@ -164,13 +161,14 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     });
   };
 
+  // Register finish tools at extension load time (factory), once per instance.
+  for (const [name, mode] of Object.entries(getModes())) {
+    registerFinishTool(name, mode);
+  }
+
   pi.on("session_start", async (_event, ctx) => {
-    for (const [name, mode] of Object.entries(getModes())) {
-      registerFinishTool(name, mode);
-    }
-    activeModeName = undefined;
-    activeMode = undefined;
-    refreshStatus(ctx);
+    // Reset gating state through the single state-change entry point.
+    setMode(undefined, ctx);
   });
 
   pi.on("input", async (event, ctx) => {

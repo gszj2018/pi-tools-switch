@@ -156,20 +156,28 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
         } => {
           ctx.ui.notify(params.summary, "info");
           return {
-            content: [{ type: "text", text: params.summary }],
-            details: {},
+            content: [
+              { type: "text", text: `The user has accepted. Exiting ${modeName} mode now.` },
+            ],
+            details: { summary: params.summary },
             terminate: true,
           };
         };
         if (!ctx.hasUI) return accept();
         const choice = await ctx.ui.select(
-          `${modeName} mode: accept the summary or refine it?`,
+          `${modeName} mode: accept the summary or refine it?\n${params.summary}`,
           ["Accept", "Refine"],
         );
         if (choice === "Refine") {
-          const refinement = await ctx.ui.input("Refinement:", "");
+          const refinement = (await ctx.ui.input("Refinement:", ""))?.trim() ?? "";
+          const hint = refinement ? ` Refinement hint: ${refinement}` : "";
           return {
-            content: [{ type: "text", text: refinement ?? "" }],
+            content: [
+              {
+                type: "text",
+                text: `The user requested further improvements. You are still in ${modeName} mode.${hint}`,
+              },
+            ],
             details: { summary: params.summary },
           };
         }

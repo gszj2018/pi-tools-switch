@@ -8,7 +8,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Config } from "./config.ts";
 
-export const GUIDE_STATUS_BAR_KEY = "pi-tools-switch-guide";
+const GUIDE_STATUS_BAR_KEY = "pi-tools-switch-guide";
 
 const TOOL_GUIDE_PROMPT = `When exploring or searching the project, prefer the find, grep, or ls tools over bash whenever they are available.`;
 

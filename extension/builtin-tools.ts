@@ -16,7 +16,7 @@ import {
 } from "./utils.ts";
 import type { Config } from "./config.ts";
 
-export const STATUS_BAR_KEY = "pi-tools-switch-status";
+const STATUS_BAR_KEY = "pi-tools-switch-status";
 
 const STATUS_CHARS: Record<BuiltinToolName, string> = {
   read: "R",
@@ -91,7 +91,7 @@ export function applyPreset(activeTools: readonly string[], presetTools: readonl
  * Result of validating a list of tool names: `ok` is true when every name is a
  * built-in tool; `tools` carries the valid names, `invalid` the invalid ones.
  */
-export interface ToolValidationResult {
+interface ToolValidationResult {
   ok: boolean;
   tools: BuiltinToolName[];
   invalid: string[];

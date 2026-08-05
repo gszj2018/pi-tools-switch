@@ -38,7 +38,7 @@ export function isValidPresetName(name: string): boolean {
 }
 
 /** Normalize a path to POSIX separators for cross-platform comparison. */
-export function toPosixPath(path: string): string {
+function toPosixPath(path: string): string {
   return path.split(sep).join("/");
 }
 
@@ -52,11 +52,11 @@ function normalizeDriveLetter(path: string): string {
 }
 
 /**
- * Normalize a path for comparison: POSIX separators, plus lowercase the drive
+ * Normalize a path for comparison: POSIX separators, plus uppercase the drive
  * letter on Windows (the most common case mismatch). Directory/file names are
  * left untouched: callers should keep them consistent with cwd/config casing.
  */
-export function toComparablePath(path: string): string {
+function toComparablePath(path: string): string {
   const normalized = toPosixPath(path);
   return IS_WINDOWS ? normalizeDriveLetter(normalized) : normalized;
 }

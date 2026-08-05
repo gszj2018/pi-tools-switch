@@ -10,7 +10,7 @@ import { Type } from "typebox";
 import { READ_ONLY_TOOLS, isPathInDirs, resolveDir } from "./utils.ts";
 import type { Config, GatingModeConfig } from "./config.ts";
 
-export const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
+const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
 
 /** Built-in gating modes, keyed by mode name. User modes with the same name override them. */
 export const BUILTIN_GATING_MODES: Record<string, GatingModeConfig> = {
@@ -45,7 +45,7 @@ export function formatModeStatus(name: string | undefined): string {
 }
 
 /** Blocked reason for write/edit when the target is outside allowWriteDir. */
-export function buildWriteReason(modeName: string, mode: GatingModeConfig, cwd: string): string {
+function buildWriteReason(modeName: string, mode: GatingModeConfig, cwd: string): string {
   let reason = `In ${modeName} mode, file modification is not allowed`;
   if (mode.allowWriteDir.length > 0) {
     const dirs = mode.allowWriteDir.map((dir) => resolveDir(dir, cwd)).join(", ");
@@ -70,7 +70,7 @@ export function buildBlockReason(modeName: string, mode: GatingModeConfig): stri
   return reason;
 }
 
-export interface GatingDecision {
+interface GatingDecision {
   allowed: boolean;
   reason?: string;
 }

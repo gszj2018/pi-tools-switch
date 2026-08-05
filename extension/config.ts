@@ -15,7 +15,7 @@ import { isBuiltinToolName, isValidPresetName, type BuiltinToolName } from "./ut
 
 export const CONFIG_FILE_NAME = "tools-switch.json";
 
-export interface ToolGuideConfig {
+interface ToolGuideConfig {
   enabled: boolean;
 }
 

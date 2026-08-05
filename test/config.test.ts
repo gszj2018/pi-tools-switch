@@ -209,3 +209,26 @@ test("loadConfigFrom throws on malformed JSON", async () => {
     await cleanupTempDir(dir);
   }
 });
+
+test("config objects are deeply frozen", () => {
+  assert.ok(Object.isFrozen(DEFAULT_CONFIG));
+  const r = normalizeConfig({
+    presets: { p: ["read"] },
+    gatingModes: {
+      m: { trigger: "/x", allowTools: ["read"], allowWriteDir: [] },
+    },
+  });
+  assert.ok(Object.isFrozen(r.config));
+  assert.ok(Object.isFrozen(r.config.presets));
+  assert.ok(Object.isFrozen(r.config.presets["p"]));
+  assert.ok(Object.isFrozen(r.config.gatingModes["m"]));
+  assert.ok(Object.isFrozen(r.config.gatingModes["m"].allowTools));
+  assert.ok(Object.isFrozen(r.config.subagentEnvVars));
+  // Mutation attempts throw in strict mode.
+  assert.throws(() => {
+    (r.config.subagentEnvVars as string[]).push("PI_X");
+  }, TypeError);
+  assert.throws(() => {
+    (r.config.presets as Record<string, string[]>)["new"] = ["read"];
+  }, TypeError);
+});

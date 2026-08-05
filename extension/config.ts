@@ -45,12 +45,23 @@ export interface ConfigLoadResult {
   errors: string[];
 }
 
-export const DEFAULT_CONFIG: Config = {
+/** Recursively freeze an object graph so consumers cannot mutate the config. */
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const key of Object.keys(value)) {
+      deepFreeze((value as Record<string, unknown>)[key]);
+    }
+  }
+  return value;
+}
+
+export const DEFAULT_CONFIG: Config = deepFreeze({
   presets: {},
   toolGuide: { enabled: true },
   subagentEnvVars: [],
   gatingModes: {},
-};
+});
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -164,7 +175,7 @@ export function normalizeConfig(data: unknown): ConfigLoadResult {
   }
 
   return {
-    config: {
+    config: deepFreeze({
       presets: normalizePresets(data.presets, errors),
       defaultPreset:
         typeof defaultPreset === "string" && isValidPresetName(defaultPreset)
@@ -176,7 +187,7 @@ export function normalizeConfig(data: unknown): ConfigLoadResult {
           : { enabled: true },
       subagentEnvVars: toStringArray(data.subagentEnvVars, errors, "subagentEnvVars"),
       gatingModes: normalizeGatingModes(data.gatingModes, errors),
-    },
+    }),
     errors,
   };
 }

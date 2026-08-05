@@ -28,9 +28,12 @@ test("computeStatusBar ignores non-built-in tools", () => {
 });
 
 test("formatPresetLine includes name and shorthand", () => {
-  assert.equal(formatPresetLine("read", ["read"]), "read  [R------]");
-  assert.equal(formatPresetLine("explore", ["read", "find", "grep", "ls"]), "explore  [R---FGL]");
-  assert.equal(formatPresetLine("full", ["read", "write", "edit", "bash", "find", "grep", "ls"]), "full  [RWEBFGL]");
+  assert.equal(formatPresetLine("read", ["read"]), "[R------] read");
+  assert.equal(formatPresetLine("explore", ["read", "find", "grep", "ls"]), "[R---FGL] explore");
+  assert.equal(
+    formatPresetLine("full", ["read", "write", "edit", "bash", "find", "grep", "ls"]),
+    "[RWEBFGL] full",
+  );
 });
 
 test("formatToolsStatus marks on/off and built-in kind", () => {
@@ -40,7 +43,7 @@ test("formatToolsStatus marks on/off and built-in kind", () => {
     { name: "my_custom_tool" },
   ];
   const text = formatToolsStatus(["read"], all);
-  assert.equal(text, "[on]  read (built-in)\n[off] bash (built-in)\n[off] my_custom_tool");
+  assert.equal(text, "[+] read (built-in)\n[ ] bash (built-in)\n[ ] my_custom_tool");
 });
 
 test("formatGuideStatus renders enabled and disabled", () => {

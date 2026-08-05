@@ -127,9 +127,9 @@ export function toggleBuiltinTools(
   return [...next];
 }
 
-/** One line for the preset list: `name  [R---FGL]`. */
+/** One line for the preset list: `[R---FGL] name` (shorthand first for alignment). */
 export function formatPresetLine(name: string, tools: readonly string[]): string {
-  return `${name}  ${computeStatusBar(tools)}`;
+  return `${computeStatusBar(tools)} ${name}`;
 }
 
 /** Text block listing all tools with their on/off state. */
@@ -140,7 +140,7 @@ export function formatToolsStatus(
   const active = new Set(activeTools);
   return allTools
     .map((tool) => {
-      const state = active.has(tool.name) ? "[on] " : "[off]";
+      const state = active.has(tool.name) ? "[+]" : "[ ]";
       const kind = isBuiltinToolName(tool.name) ? " (built-in)" : "";
       return `${state} ${tool.name}${kind}`;
     })

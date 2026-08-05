@@ -11,7 +11,7 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BUILTIN_TOOL_NAMES, isValidPresetName, type BuiltinToolName } from "./utils.ts";
+import { isBuiltinToolName, isValidPresetName, type BuiltinToolName } from "./utils.ts";
 
 export const CONFIG_FILE_NAME = "tools-switch.json";
 
@@ -92,8 +92,8 @@ function normalizePresets(value: unknown, errors: string[]): Record<string, stri
     }
     const valid: BuiltinToolName[] = [];
     for (const tool of tools) {
-      if (typeof tool === "string" && (BUILTIN_TOOL_NAMES as readonly string[]).includes(tool)) {
-        valid.push(tool as BuiltinToolName);
+      if (typeof tool === "string" && isBuiltinToolName(tool)) {
+        valid.push(tool);
       } else {
         errors.push(`presets["${name}"]: ignored unknown tool ${JSON.stringify(tool)}`);
       }

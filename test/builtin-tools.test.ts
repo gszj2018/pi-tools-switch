@@ -1,0 +1,95 @@
+/**
+ * Unit tests for built-in tool state management (extension/builtin-tools.ts).
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  BUILTIN_SUBAGENT_ENV_VARS,
+  isSubagentEnv,
+  toggleBuiltinTools,
+  validateBuiltinTools,
+} from "../extension/builtin-tools.ts";
+
+test("BUILTIN_SUBAGENT_ENV_VARS covers the documented subagent frameworks", () => {
+  const expected = [
+    "PI_IS_SUBAGENT",
+    "PI_SUBAGENT_SESSION_ID",
+    "PI_AGENT_ROUTER_SUBAGENT",
+    "PI_SUBAGENT_CHILD",
+    "PI_SUBAGENT_RUN_ID",
+    "PI_SUBAGENT_CHILD_AGENT",
+    "PI_SUBAGENT_DEPTH",
+    "PI_SUBAGENT_NAME",
+    "PI_SUBAGENT_ID",
+    "PI_SUBAGENT_SESSION",
+    "PI_SUBAGENT_ACTIVITY_FILE",
+  ];
+  assert.deepEqual([...BUILTIN_SUBAGENT_ENV_VARS].sort(), expected.sort());
+});
+
+test("isSubagentEnv detects built-in vars", () => {
+  assert.equal(isSubagentEnv({}, []), false);
+  assert.equal(isSubagentEnv({ PI_IS_SUBAGENT: "1" }, []), true);
+  assert.equal(isSubagentEnv({ PI_SUBAGENT_SESSION_ID: "abc" }, []), true);
+  assert.equal(isSubagentEnv({ PI_SUBAGENT_ACTIVITY_FILE: "/tmp/x.json" }, []), true);
+});
+
+test("isSubagentEnv treats empty-string values as not set", () => {
+  assert.equal(isSubagentEnv({ PI_IS_SUBAGENT: "" }, []), false);
+  assert.equal(isSubagentEnv({ PI_SUBAGENT_RUN_ID: "" }, []), false);
+});
+
+test("isSubagentEnv honors extra user vars on top of the built-in list", () => {
+  assert.equal(isSubagentEnv({ PI_SUBAGENT: "1" }, []), false);
+  assert.equal(isSubagentEnv({ PI_SUBAGENT: "1" }, ["PI_SUBAGENT"]), true);
+  assert.equal(isSubagentEnv({ MY_SUBAGENT_VAR: "1" }, ["MY_SUBAGENT_VAR"]), true);
+});
+
+test("toggleBuiltinTools enables and disables a single built-in tool", () => {
+  assert.deepEqual(toggleBuiltinTools([], ["read"], true), ["read"]);
+  assert.deepEqual(toggleBuiltinTools(["read"], ["read"], true), ["read"]);
+  assert.deepEqual(toggleBuiltinTools(["read", "bash"], ["read"], false), ["bash"]);
+  assert.deepEqual(toggleBuiltinTools(["read"], ["bash"], false), ["read"]);
+});
+
+test("toggleBuiltinTools preserves external tools", () => {
+  assert.deepEqual(toggleBuiltinTools(["my_custom_tool"], ["read"], true), ["my_custom_tool", "read"]);
+  assert.deepEqual(toggleBuiltinTools(["read", "my_custom_tool"], ["read"], false), ["my_custom_tool"]);
+});
+
+test("toggleBuiltinTools toggles multiple tools at once", () => {
+  assert.deepEqual(toggleBuiltinTools([], ["read", "grep", "ls"], true), ["read", "grep", "ls"]);
+  assert.deepEqual(toggleBuiltinTools(["read", "write", "edit", "bash"], ["write", "edit"], false), [
+    "read",
+    "bash",
+  ]);
+});
+
+test("toggleBuiltinTools dedupes repeated tools and keeps external tools", () => {
+  const next = toggleBuiltinTools(["my_custom_tool"], ["read", "read", "grep"], true);
+  assert.deepEqual(next, ["my_custom_tool", "read", "grep"]);
+  const disabled = toggleBuiltinTools(["read", "grep", "ls"], ["grep", "grep", "ls"], false);
+  assert.deepEqual(disabled, ["read"]);
+});
+
+test("validateBuiltinTools accepts only valid lists", () => {
+  const ok = validateBuiltinTools(["read", "bash", "grep"]);
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.tools, ["read", "bash", "grep"]);
+  assert.deepEqual(ok.invalid, []);
+});
+
+test("validateBuiltinTools reports invalid names and keeps valid ones", () => {
+  const mixed = validateBuiltinTools(["read", "bogus", "bash", "nope"]);
+  assert.equal(mixed.ok, false);
+  assert.deepEqual(mixed.tools, ["read", "bash"]);
+  assert.deepEqual(mixed.invalid, ["bogus", "nope"]);
+});
+
+test("validateBuiltinTools handles empty and all-invalid lists", () => {
+  assert.deepEqual(validateBuiltinTools([]), { ok: true, tools: [], invalid: [] });
+  const allInvalid = validateBuiltinTools(["nope", "wat"]);
+  assert.equal(allInvalid.ok, false);
+  assert.deepEqual(allInvalid.tools, []);
+  assert.deepEqual(allInvalid.invalid, ["nope", "wat"]);
+});

@@ -9,6 +9,14 @@ import { isAbsolute, join, posix, resolve, sep } from "node:path";
 export const BUILTIN_TOOL_NAMES = ["read", "write", "edit", "bash", "find", "grep", "ls"] as const;
 export type BuiltinToolName = (typeof BUILTIN_TOOL_NAMES)[number];
 
+/** Set form of BUILTIN_TOOL_NAMES for membership checks. */
+export const BUILTIN_TOOL_SET: ReadonlySet<string> = new Set(BUILTIN_TOOL_NAMES);
+
+/** Type guard for built-in tool names. */
+export function isBuiltinToolName(name: string): name is BuiltinToolName {
+  return BUILTIN_TOOL_SET.has(name);
+}
+
 /** Tools treated as read-only by the gating logic. */
 export const READ_ONLY_TOOLS: readonly string[] = ["read", "find", "grep", "ls"];
 

@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { computeStatusBar, formatPresetLine, formatToolsStatus } from "../extension/builtin-tools.ts";
+import { formatGuideStatus } from "../extension/system-prompt.ts";
 
 test("computeStatusBar renders [RWEBFGL] when all built-in tools are active", () => {
   assert.equal(computeStatusBar(["read", "write", "edit", "bash", "find", "grep", "ls"]), "[RWEBFGL]");
@@ -40,4 +41,9 @@ test("formatToolsStatus marks on/off and built-in kind", () => {
   ];
   const text = formatToolsStatus(["read"], all);
   assert.equal(text, "[on]  read (built-in)\n[off] bash (built-in)\n[off] my_custom_tool");
+});
+
+test("formatGuideStatus renders enabled and disabled", () => {
+  assert.equal(formatGuideStatus(true), "[+G]");
+  assert.equal(formatGuideStatus(false), "[-G]");
 });

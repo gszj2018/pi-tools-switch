@@ -12,7 +12,8 @@
   "author": "gszj2018",
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "typecheck": "tsc --noEmit"
   },
   "pi": {
     "extensions": [

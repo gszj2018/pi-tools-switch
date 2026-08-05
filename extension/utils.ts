@@ -6,8 +6,18 @@ import { homedir } from "node:os";
 import { isAbsolute, join, posix, resolve, sep } from "node:path";
 
 /** The 7 built-in tools managed by this extension, in status display order. */
-export const BUILTIN_TOOL_NAMES = ["read", "write", "edit", "bash", "find", "grep", "ls"] as const;
-export type BuiltinToolName = (typeof BUILTIN_TOOL_NAMES)[number];
+export type BuiltinToolName = "read" | "write" | "edit" | "bash" | "find" | "grep" | "ls";
+
+/** Built-in tool names in status display order. */
+export const BUILTIN_TOOL_NAMES: readonly BuiltinToolName[] = [
+  "read",
+  "write",
+  "edit",
+  "bash",
+  "find",
+  "grep",
+  "ls",
+];
 
 /** Set form of BUILTIN_TOOL_NAMES for membership checks. */
 export const BUILTIN_TOOL_SET: ReadonlySet<string> = new Set(BUILTIN_TOOL_NAMES);

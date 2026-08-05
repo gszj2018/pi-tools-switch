@@ -54,6 +54,22 @@ export function buildWriteReason(modeName: string, mode: GatingModeConfig, cwd: 
   return reason;
 }
 
+/**
+ * Blocked reason for other tools: lists the allowed tools (finish, read-only,
+ * and mode allowTools) and notes that write/edit are conditionally allowed.
+ */
+export function buildBlockReason(modeName: string, mode: GatingModeConfig): string {
+  const allowed = [
+    ...new Set([`finish_${modeName}_mode`, ...READ_ONLY_TOOLS, ...mode.allowTools]),
+  ];
+  let reason = `In ${modeName} mode, this tool is not allowed. Allowed tools: ${allowed.join(", ")}`;
+  reason +=
+    mode.allowWriteDir.length > 0
+      ? ". write/edit are conditionally allowed"
+      : ". write/edit are not allowed";
+  return reason;
+}
+
 export interface GatingDecision {
   allowed: boolean;
   reason?: string;
@@ -83,7 +99,7 @@ export function decideToolCall(
     }
     return { allowed: false, reason: buildWriteReason(modeName, mode, cwd) };
   }
-  return { allowed: false, reason: `In ${modeName} mode, this tool is not allowed` };
+  return { allowed: false, reason: buildBlockReason(modeName, mode) };
 }
 
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {

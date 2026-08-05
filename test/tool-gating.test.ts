@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BUILTIN_GATING_MODES,
+  buildBlockReason,
   decideToolCall,
   formatModeStatus,
   matchTrigger,
@@ -129,8 +130,38 @@ test("decideToolCall blocks other tools (bash, external) with reason", () => {
   for (const tool of ["bash", "my_custom_tool"]) {
     const d = decideToolCall(tool, {}, "plan", BUILTIN_PLAN, FINISH, CWD);
     assert.equal(d.allowed, false, `${tool} should be blocked`);
-    assert.equal(d.reason, "In plan mode, this tool is not allowed");
+    assert.ok(
+      d.reason?.includes("In plan mode, this tool is not allowed"),
+      `reason prefix: ${d.reason}`,
+    );
+    assert.ok(
+      d.reason?.includes("Allowed tools: finish_plan_mode, read, find, grep, ls"),
+      `reason lists allowed: ${d.reason}`,
+    );
+    assert.ok(
+      d.reason?.includes("write/edit are conditionally allowed"),
+      `reason notes write: ${d.reason}`,
+    );
   }
+});
+
+test("decideToolCall appends allowTools to the allowed-tools list", () => {
+  const mode = { ...BUILTIN_PLAN, allowTools: ["bash", "my_tool"] };
+  const d = decideToolCall("python", {}, "plan", mode, FINISH, CWD);
+  assert.equal(d.allowed, false);
+  assert.ok(
+    d.reason?.includes("Allowed tools: finish_plan_mode, read, find, grep, ls, bash, my_tool"),
+    `reason: ${d.reason}`,
+  );
+});
+
+test("buildBlockReason notes write/edit as not allowed when allowWriteDir is empty", () => {
+  const mode = { trigger: "/x", allowTools: [], allowWriteDir: [] };
+  const reason = buildBlockReason("x", mode);
+  assert.equal(
+    reason,
+    "In x mode, this tool is not allowed. Allowed tools: finish_x_mode, read, find, grep, ls. write/edit are not allowed",
+  );
 });
 
 test("decideToolCall blocks write with missing or non-string path", () => {

@@ -1,8 +1,8 @@
 /**
- * Unit tests for system prompt injection (extension/system-prompt.ts):
- * the main registration appends both guides and owns the SPL status bar;
- * the subagent registration appends only the tool guide and owns no status
- * bar.
+ * Integration tests for system prompt injection (extension/system-prompt.ts),
+ * driven through a mock pi: the main registration appends both guides and
+ * owns the SPL status bar; the subagent registration appends only the tool
+ * guide and owns no status bar.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";

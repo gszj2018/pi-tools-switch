@@ -1,10 +1,12 @@
 /**
  * System prompt injection for pi-tools-switch.
  *
- * Always appends the tool-guide prompt and the tool-gating guidance prompt at
- * before_agent_start (no config switch), and owns the "pi-tools-switch-spl"
- * status bar showing the system prompt length ([SPL: -] at session start,
- * [SPL: <length>] at agent_start). No config dependency.
+ * The main registration (register) always appends the tool-guide prompt and
+ * the tool-gating guidance prompt at before_agent_start (no config switch),
+ * and owns the "pi-tools-switch-spl" status bar showing the system prompt
+ * length ([SPL: -] at session start, [SPL: <length>] at agent_start). The
+ * subagent registration (registerForSubagent) injects only the tool-guide
+ * prompt and owns no status bar. No config dependency.
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -46,5 +48,17 @@ export function register(pi: ExtensionAPI): void {
     return {
       systemPrompt: `${event.systemPrompt}\n\n${TOOL_GUIDE_PROMPT}\n\n${GATING_MODE_GUIDANCE_PROMPT}`,
     };
+  });
+}
+
+/**
+ * Subagent variant of register: injects only the tool-guide prompt and no
+ * gating-mode guidance, and owns no SPL status bar. Used by index.ts when the
+ * extension runs inside a subagent, where built-in tools management and tool
+ * gating are skipped entirely.
+ */
+export function registerForSubagent(pi: ExtensionAPI): void {
+  pi.on("before_agent_start", async (event) => {
+    return { systemPrompt: `${event.systemPrompt}\n\n${TOOL_GUIDE_PROMPT}` };
   });
 }

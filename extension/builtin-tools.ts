@@ -28,24 +28,6 @@ const STATUS_CHARS: Record<BuiltinToolName, string> = {
   ls: "L",
 };
 
-/** Built-in subagent detection environment variables. */
-export const BUILTIN_SUBAGENT_ENV_VARS: readonly string[] = [
-  // pi-agent-router (original)
-  "PI_IS_SUBAGENT",
-  "PI_SUBAGENT_SESSION_ID",
-  "PI_AGENT_ROUTER_SUBAGENT",
-  // nicobailon/pi-subagents
-  "PI_SUBAGENT_CHILD",
-  "PI_SUBAGENT_RUN_ID",
-  "PI_SUBAGENT_CHILD_AGENT",
-  "PI_SUBAGENT_DEPTH",
-  // HazAT/pi-interactive-subagents
-  "PI_SUBAGENT_NAME",
-  "PI_SUBAGENT_ID",
-  "PI_SUBAGENT_SESSION",
-  "PI_SUBAGENT_ACTIVITY_FILE",
-];
-
 /** Built-in presets. User presets with the same name override these. */
 export const BUILTIN_PRESETS: Record<string, readonly string[]> = {
   read: ["read"],
@@ -53,15 +35,6 @@ export const BUILTIN_PRESETS: Record<string, readonly string[]> = {
   default: ["read", "write", "edit", "bash"],
   full: [...BUILTIN_TOOL_NAMES],
 };
-
-/** True when any known subagent env var (built-in or user-extended) is set. */
-export function isSubagentEnv(env: NodeJS.ProcessEnv, extraVars: readonly string[]): boolean {
-  const vars = [...BUILTIN_SUBAGENT_ENV_VARS, ...extraVars];
-  return vars.some((name) => {
-    const value = env[name];
-    return value !== undefined && value !== "";
-  });
-}
 
 /** Merge built-in presets with user presets (user wins on name collision). */
 export function mergePresets(userPresets: Record<string, string[]>): Record<string, readonly string[]> {
@@ -137,31 +110,34 @@ export function formatDefaultStatus(name: string | undefined): string {
   return `[D: ${name ?? "-"}]`;
 }
 
-/** Resolution of the configured default preset for the current session. */
+/** Resolution of the configured default preset. */
 export interface EffectiveDefaultPreset {
   /** Effective preset name, or undefined when not effective. */
   preset: string | undefined;
+  /** The configured defaultPreset value (undefined when not configured). */
+  configured: string | undefined;
   /** True when defaultPreset was configured but does not exist (invalid). */
   invalid: boolean;
 }
 
 /**
- * Resolve the effective default preset for the current session from the
- * (already merged) presets: not effective when running as a subagent, when no
- * defaultPreset is configured, or when the configured preset does not exist.
+ * Resolve the effective default preset from the (already merged) presets: not
+ * effective when no defaultPreset is configured or when the configured preset
+ * does not exist. Subagents are excluded at the factory layer (index.ts skips
+ * registering this module for subagents), so no subagent branch is needed
+ * here. Runs once at the factory layer; the result is stable for the process.
  */
 export function getEffectiveDefaultPreset(
   defaultPreset: string | undefined,
   presets: Record<string, readonly string[]>,
-  subagent: boolean,
 ): EffectiveDefaultPreset {
-  if (subagent || defaultPreset === undefined) {
-    return { preset: undefined, invalid: false };
+  if (defaultPreset === undefined) {
+    return { preset: undefined, configured: undefined, invalid: false };
   }
   if (presets[defaultPreset]) {
-    return { preset: defaultPreset, invalid: false };
+    return { preset: defaultPreset, configured: defaultPreset, invalid: false };
   }
-  return { preset: undefined, invalid: true };
+  return { preset: undefined, configured: defaultPreset, invalid: true };
 }
 
 /** Text block listing all tools with their on/off state. */
@@ -259,19 +235,17 @@ function presetNameCompletions(
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   // Config-derived state cached once at load time (rebuilt on extension reload).
   const presets = mergePresets(getConfig().presets);
-  const subagentEnvVars = getConfig().subagentEnvVars;
-  const defaultPreset = getConfig().defaultPreset;
+  // Effective default preset resolved once at the factory layer: it depends
+  // only on the frozen config, and index.ts never registers this module for
+  // subagents, so nothing session-specific remains to resolve later.
+  const effectiveDefault = getEffectiveDefaultPreset(getConfig().defaultPreset, presets);
 
   const refreshStatus = (ctx: ExtensionContext): void => {
     ctx.ui.setStatus(
       STATUS_BAR_KEY,
-      `${computeStatusBar(pi.getActiveTools())} ${formatDefaultStatus(effectiveDefaultPreset)}`,
+      `${computeStatusBar(pi.getActiveTools())} ${formatDefaultStatus(effectiveDefault.preset)}`,
     );
   };
-
-  // Effective default preset cached at session start (undefined when not
-  // configured, invalid, or skipped for subagents).
-  let effectiveDefaultPreset: string | undefined;
 
   const applyPresetByName = (name: string): { next: string[]; ok: boolean; error?: string } => {
     const tools = presets[name];
@@ -293,18 +267,18 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
         return;
       }
       if (sub === "default") {
-        if (!effectiveDefaultPreset) {
+        if (!effectiveDefault.preset) {
           ctx.ui.notify("No default preset configured", "warning");
           return;
         }
-        const result = applyPresetByName(effectiveDefaultPreset);
+        const result = applyPresetByName(effectiveDefault.preset);
         if (!result.ok) {
           ctx.ui.notify(result.error ?? "Unknown preset", "error");
           return;
         }
         refreshStatus(ctx);
         ctx.ui.notify(
-          `Restored preset "${effectiveDefaultPreset}" (${computeStatusBar(result.next)})`,
+          `Restored preset "${effectiveDefault.preset}" (${computeStatusBar(result.next)})`,
           "info",
         );
         return;
@@ -367,17 +341,14 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   });
 
   pi.on("session_start", async (_event, ctx) => {
-    const subagent = isSubagentEnv(process.env, subagentEnvVars);
-    const effective = getEffectiveDefaultPreset(defaultPreset, presets, subagent);
-    effectiveDefaultPreset = effective.preset;
-    if (effective.preset) {
-      const result = applyPresetByName(effective.preset);
+    if (effectiveDefault.preset) {
+      const result = applyPresetByName(effectiveDefault.preset);
       if (!result.ok) {
         ctx.ui.notify(result.error ?? "Unknown preset", "error");
       }
-    } else if (effective.invalid) {
+    } else if (effectiveDefault.invalid) {
       // Configured default preset does not exist.
-      ctx.ui.notify(`Unknown preset: ${defaultPreset}`, "error");
+      ctx.ui.notify(`Unknown preset: ${effectiveDefault.configured}`, "error");
     }
     refreshStatus(ctx);
   });

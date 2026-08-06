@@ -4,49 +4,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  BUILTIN_SUBAGENT_ENV_VARS,
   getEffectiveDefaultPreset,
-  isSubagentEnv,
   mergePresets,
   toggleBuiltinTools,
   toolsSwitchCompletions,
   validateBuiltinTools,
 } from "../extension/builtin-tools.ts";
-
-test("BUILTIN_SUBAGENT_ENV_VARS covers the documented subagent frameworks", () => {
-  const expected = [
-    "PI_IS_SUBAGENT",
-    "PI_SUBAGENT_SESSION_ID",
-    "PI_AGENT_ROUTER_SUBAGENT",
-    "PI_SUBAGENT_CHILD",
-    "PI_SUBAGENT_RUN_ID",
-    "PI_SUBAGENT_CHILD_AGENT",
-    "PI_SUBAGENT_DEPTH",
-    "PI_SUBAGENT_NAME",
-    "PI_SUBAGENT_ID",
-    "PI_SUBAGENT_SESSION",
-    "PI_SUBAGENT_ACTIVITY_FILE",
-  ];
-  assert.deepEqual([...BUILTIN_SUBAGENT_ENV_VARS].sort(), expected.sort());
-});
-
-test("isSubagentEnv detects built-in vars", () => {
-  assert.equal(isSubagentEnv({}, []), false);
-  assert.equal(isSubagentEnv({ PI_IS_SUBAGENT: "1" }, []), true);
-  assert.equal(isSubagentEnv({ PI_SUBAGENT_SESSION_ID: "abc" }, []), true);
-  assert.equal(isSubagentEnv({ PI_SUBAGENT_ACTIVITY_FILE: "/tmp/x.json" }, []), true);
-});
-
-test("isSubagentEnv treats empty-string values as not set", () => {
-  assert.equal(isSubagentEnv({ PI_IS_SUBAGENT: "" }, []), false);
-  assert.equal(isSubagentEnv({ PI_SUBAGENT_RUN_ID: "" }, []), false);
-});
-
-test("isSubagentEnv honors extra user vars on top of the built-in list", () => {
-  assert.equal(isSubagentEnv({ PI_SUBAGENT: "1" }, []), false);
-  assert.equal(isSubagentEnv({ PI_SUBAGENT: "1" }, ["PI_SUBAGENT"]), true);
-  assert.equal(isSubagentEnv({ MY_SUBAGENT_VAR: "1" }, ["MY_SUBAGENT_VAR"]), true);
-});
 
 test("toggleBuiltinTools enables and disables a single built-in tool", () => {
   assert.deepEqual(toggleBuiltinTools([], ["read"], true), ["read"]);
@@ -165,28 +128,27 @@ test("toolsSwitchCompletions suggests the default subcommand without trailing sp
 
 test("getEffectiveDefaultPreset returns the preset only when effective", () => {
   const presets = mergePresets({ explore: ["read", "find", "grep", "ls"] });
-  assert.deepEqual(getEffectiveDefaultPreset("explore", presets, false), {
+  assert.deepEqual(getEffectiveDefaultPreset("explore", presets), {
     preset: "explore",
-    invalid: false,
-  });
-  // Subagent skips even when configured.
-  assert.deepEqual(getEffectiveDefaultPreset("explore", presets, true), {
-    preset: undefined,
+    configured: "explore",
     invalid: false,
   });
   // Not configured.
-  assert.deepEqual(getEffectiveDefaultPreset(undefined, presets, false), {
+  assert.deepEqual(getEffectiveDefaultPreset(undefined, presets), {
     preset: undefined,
+    configured: undefined,
     invalid: false,
   });
   // Configured but the preset does not exist -> invalid.
-  assert.deepEqual(getEffectiveDefaultPreset("nope", presets, false), {
+  assert.deepEqual(getEffectiveDefaultPreset("nope", presets), {
     preset: undefined,
+    configured: "nope",
     invalid: true,
   });
   // Built-in preset works too.
-  assert.deepEqual(getEffectiveDefaultPreset("read", presets, false), {
+  assert.deepEqual(getEffectiveDefaultPreset("read", presets), {
     preset: "read",
+    configured: "read",
     invalid: false,
   });
 });

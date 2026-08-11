@@ -24,11 +24,9 @@ export const TOOL_GUIDE_PROMPT = `When exploring or searching the project, prefe
 export const GATING_MODE_GUIDANCE_PROMPT = `This coding assistant has several tool gating modes; while a specific mode is active, some tool calls are restricted.
 
 - Restricted tools still appear in the available tools list, but calls that do not comply with the active mode are intercepted by the system, which returns an error explaining the restriction.
-- A gating mode is enabled by a matching prompt, such as a skill invocation or a specific input prefix.
-- The system injects a message whenever your gating state changes: it states which mode you are in and its restrictions, or that you are not currently in any gating mode. Treat that message as the authoritative source for the current gating state; do not infer it from tool availability or from your memory of earlier turns, which may be stale.
-- While a gating mode is active, a finish tool named \`finish_<name>_mode\` becomes available, but its availability is not a reliable indicator of the current mode.
-- When you have completed the task and are ready to leave the gating mode, call that finish tool to ask the user. The user may then choose to exit the mode and end the current turn, or ask you to continue refining the work; in the latter case the conversation continues and the gating mode stays active.
-- The gating mode ends when the current conversation terminates, whether or not you called the finish tool, and the system then injects a message telling you that you are no longer in a gating mode. Re-entering a mode later always requires the user to enable it explicitly.`;
+- A gating mode is enabled by a matching prompt, such as a skill invocation or a specific input prefix, and stays active until the user exits it explicitly.
+- The system injects an authoritative message reporting the current gating state.
+- When the work is complete, call the finish tool \`finish_<name>_mode\` to ask the user: they may accept and exit the mode (ending the turn), accept and stay in the mode (ending the turn), or request further improvements (the turn continues and the mode stays active).`;
 
 /** Status bar text for the system prompt length: [SPL: <length>] or [SPL: -]. */
 export function formatSplStatus(length: number | undefined): string {

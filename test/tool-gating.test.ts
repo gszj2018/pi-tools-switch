@@ -53,10 +53,10 @@ test("matchTrigger returns undefined when nothing matches", () => {
 
 test("matchTrigger respects user mode order and multiple triggers", () => {
   const modes = mergeGatingModes({
-    a: { trigger: ["AB"], allowTools: [], allowWriteDir: [] },
+    a: { trigger: ["A"], allowTools: [], allowWriteDir: [] },
     b: { trigger: ["AB:", "B2:"], allowTools: [], allowWriteDir: [] },
   });
-  assert.equal(matchTrigger("AB: x", modes), "a"); // "AB" (mode a) comes first
+  assert.equal(matchTrigger("AB: x", modes), "a"); // "A" (mode a) comes first
   assert.equal(matchTrigger("B2: y", modes), "b"); // second trigger of mode b
 });
 

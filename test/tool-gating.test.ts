@@ -29,11 +29,11 @@ test("mergeGatingModes includes the built-in plan mode under the name 'plan'", (
 
 test("mergeGatingModes honors user overrides and additions", () => {
   const merged = mergeGatingModes({
-    plan: { trigger: ["/plan"], allowTools: ["bash"], allowWriteDir: [] },
-    review: { trigger: ["/review"], allowTools: [], allowWriteDir: ["docs"] },
+    plan: { trigger: ["PLAN:"], allowTools: ["bash"], allowWriteDir: [] },
+    review: { trigger: ["REVIEW:"], allowTools: [], allowWriteDir: ["docs"] },
   });
-  assert.deepEqual(merged["plan"], { trigger: ["/plan"], allowTools: ["bash"], allowWriteDir: [] });
-  assert.deepEqual(merged["review"], { trigger: ["/review"], allowTools: [], allowWriteDir: ["docs"] });
+  assert.deepEqual(merged["plan"], { trigger: ["PLAN:"], allowTools: ["bash"], allowWriteDir: [] });
+  assert.deepEqual(merged["review"], { trigger: ["REVIEW:"], allowTools: [], allowWriteDir: ["docs"] });
   // Built-in object untouched by overrides.
   assert.deepEqual(BUILTIN_PLAN.allowWriteDir, [".agents/plans"]);
 });
@@ -53,28 +53,28 @@ test("matchTrigger returns undefined when nothing matches", () => {
 
 test("matchTrigger respects user mode order and multiple triggers", () => {
   const modes = mergeGatingModes({
-    a: { trigger: ["/a"], allowTools: [], allowWriteDir: [] },
-    b: { trigger: ["/ab", "/b2"], allowTools: [], allowWriteDir: [] },
+    a: { trigger: ["AB"], allowTools: [], allowWriteDir: [] },
+    b: { trigger: ["AB:", "B2:"], allowTools: [], allowWriteDir: [] },
   });
-  assert.equal(matchTrigger("/ab x", modes), "a"); // "/a" comes first
-  assert.equal(matchTrigger("/b2 y", modes), "b"); // second trigger of mode b
+  assert.equal(matchTrigger("AB: x", modes), "a"); // "AB" (mode a) comes first
+  assert.equal(matchTrigger("B2: y", modes), "b"); // second trigger of mode b
 });
 
 test("matchTrigger matches any of a mode's triggers", () => {
   const modes = mergeGatingModes({
-    plan: { trigger: ["/skill:plan-mode", "/plan"], allowTools: [], allowWriteDir: [] },
+    plan: { trigger: ["/skill:plan-mode", "PLAN:"], allowTools: [], allowWriteDir: [] },
   });
   assert.equal(matchTrigger("/skill:plan-mode do it", modes), "plan");
-  assert.equal(matchTrigger("/plan go", modes), "plan");
+  assert.equal(matchTrigger("PLAN: go", modes), "plan");
 });
 
 test("matchAnyTrigger matches any non-empty trigger prefix", () => {
-  assert.equal(matchAnyTrigger("/skill:normal-mode", ["/skill:normal-mode", "/quit"]), true);
+  assert.equal(matchAnyTrigger("/skill:normal-mode", ["/skill:normal-mode", "QUIT:"]), true);
   assert.equal(matchAnyTrigger("/skill:normal-mode exit now", ["/skill:normal-mode"]), true);
-  assert.equal(matchAnyTrigger("/quit", ["/skill:normal-mode", "/quit"]), true);
-  assert.equal(matchAnyTrigger("plain text", ["/skill:normal-mode", "/quit"]), false);
+  assert.equal(matchAnyTrigger("QUIT:", ["/skill:normal-mode", "QUIT:"]), true);
+  assert.equal(matchAnyTrigger("plain text", ["/skill:normal-mode", "QUIT:"]), false);
   assert.equal(matchAnyTrigger("", ["/skill:normal-mode"]), false);
-  assert.equal(matchAnyTrigger("/x", []), false);
+  assert.equal(matchAnyTrigger("X:", []), false);
 });
 
 test("decideToolCall allows everything when no mode is active", () => {
@@ -135,7 +135,7 @@ test("decideToolCall blocks write/edit outside allowWriteDir with reason", () =>
 });
 
 test("decideToolCall blocks write/edit when allowWriteDir is empty (no dir suffix)", () => {
-  const mode = { trigger: ["/x"], allowTools: [], allowWriteDir: [] };
+  const mode = { trigger: ["X:"], allowTools: [], allowWriteDir: [] };
   const d = decideToolCall("write", { path: "C:/anything.md" }, "x", mode, FINISH, CWD);
   assert.equal(d.allowed, false);
   assert.equal(d.reason, "In x mode, file modification is not allowed");
@@ -177,7 +177,7 @@ test("decideToolCall appends allowTools to the allowed-tools list", () => {
 });
 
 test("buildBlockReason notes write/edit as not allowed when allowWriteDir is empty", () => {
-  const mode = { trigger: ["/x"], allowTools: [], allowWriteDir: [] };
+  const mode = { trigger: ["X:"], allowTools: [], allowWriteDir: [] };
   const reason = buildBlockReason("x", mode);
   assert.equal(
     reason,
@@ -239,7 +239,7 @@ test("buildModeMessage states the active mode, allowed tools, and write dirs", (
 });
 
 test("buildModeMessage appends allowTools and notes write/edit not allowed when empty", () => {
-  const mode = { trigger: ["/x"], allowTools: ["bash"], allowWriteDir: [] };
+  const mode = { trigger: ["X:"], allowTools: ["bash"], allowWriteDir: [] };
   const msg = buildModeMessage("x", mode, CWD);
   assert.ok(
     msg.includes("Allowed tools: finish_x_mode, read, find, grep, ls, bash"),

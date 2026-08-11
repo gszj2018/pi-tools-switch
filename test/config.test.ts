@@ -66,23 +66,23 @@ test("normalizeConfig(valid example) normalizes and stays clean", () => {
     subagentEnvVars: ["PI_SUBAGENT"],
     gatingModes: {
       "plan-mode": {
-        trigger: ["/skill:plan-mode", "/plan"],
+        trigger: ["/skill:plan-mode", "PLAN:"],
         allowTools: [],
         allowWriteDir: [".agents/plans"],
       },
     },
-    gatingExitTrigger: ["/skill:normal-mode", "/exit"],
+    gatingExitTrigger: ["/skill:normal-mode", "EXIT:"],
   });
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.config.presets["my-preset"], ["read", "grep"]);
   assert.equal(r.config.defaultPreset, "my-preset");
   assert.deepEqual(r.config.subagentEnvVars, ["PI_SUBAGENT"]);
   assert.deepEqual(r.config.gatingModes["plan-mode"], {
-    trigger: ["/skill:plan-mode", "/plan"],
+    trigger: ["/skill:plan-mode", "PLAN:"],
     allowTools: [],
     allowWriteDir: [".agents/plans"],
   });
-  assert.deepEqual(r.config.gatingExitTrigger, ["/skill:normal-mode", "/exit"]);
+  assert.deepEqual(r.config.gatingExitTrigger, ["/skill:normal-mode", "EXIT:"]);
 });
 
 test("normalizeConfig drops invalid preset entries and dedupes tools", () => {
@@ -129,10 +129,10 @@ test("normalizeConfig validates gatingModes", () => {
       "no-trigger": { allowTools: [], allowWriteDir: [] },
       "empty-triggers": { trigger: [], allowTools: [], allowWriteDir: [] },
       "blank-trigger": { trigger: [""], allowTools: [], allowWriteDir: [] },
-      "legacy-trigger": { trigger: "/x", allowTools: [], allowWriteDir: [] },
+      "legacy-trigger": { trigger: "PLAN:", allowTools: [], allowWriteDir: [] },
       number: 42,
-      ok: { trigger: ["/a", "/b"], allowTools: "nope", allowWriteDir: { a: 1 } },
-      mixed: { trigger: ["/y", "", 3], allowTools: ["read", 3], allowWriteDir: [".a", false] },
+      ok: { trigger: ["READ:", "EXPLORE:"], allowTools: "nope", allowWriteDir: { a: 1 } },
+      mixed: { trigger: ["READ:", "", 3], allowTools: ["read", 3], allowWriteDir: [".a", false] },
     },
   });
   assert.equal(r.config.gatingModes["no-trigger"], undefined);
@@ -140,8 +140,8 @@ test("normalizeConfig validates gatingModes", () => {
   assert.equal(r.config.gatingModes["blank-trigger"], undefined);
   assert.equal(r.config.gatingModes["legacy-trigger"], undefined);
   assert.equal(r.config.gatingModes["number"], undefined);
-  assert.deepEqual(r.config.gatingModes["ok"], { trigger: ["/a", "/b"], allowTools: [], allowWriteDir: [] });
-  assert.deepEqual(r.config.gatingModes["mixed"], { trigger: ["/y"], allowTools: ["read"], allowWriteDir: [".a"] });
+  assert.deepEqual(r.config.gatingModes["ok"], { trigger: ["READ:", "EXPLORE:"], allowTools: [], allowWriteDir: [] });
+  assert.deepEqual(r.config.gatingModes["mixed"], { trigger: ["READ:"], allowTools: ["read"], allowWriteDir: [".a"] });
   assertErrors(r, [
     'gatingModes["no-trigger"]: missing or empty trigger',
     'gatingModes["empty-triggers"]: missing or empty trigger',
@@ -166,29 +166,29 @@ test("normalizeConfig defaults gatingExitTrigger to the normal-mode skill prefix
 });
 
 test("normalizeConfig validates gatingExitTrigger", () => {
-  const ok = normalizeConfig({ gatingExitTrigger: ["/exit", "/stop"] });
-  assert.deepEqual(ok.config.gatingExitTrigger, ["/exit", "/stop"]);
+  const ok = normalizeConfig({ gatingExitTrigger: ["EXIT:", "STOP:"] });
+  assert.deepEqual(ok.config.gatingExitTrigger, ["EXIT:", "STOP:"]);
   assert.deepEqual(ok.errors, []);
 
   const empty = normalizeConfig({ gatingExitTrigger: [] });
   assert.deepEqual(empty.config.gatingExitTrigger, ["/skill:normal-mode"]);
   assertErrors(empty, ["gatingExitTrigger: must contain at least one non-empty trigger prefix"]);
 
-  const blank = normalizeConfig({ gatingExitTrigger: ["", "  ", "/ok"] });
-  assert.deepEqual(blank.config.gatingExitTrigger, ["/ok"]);
+  const blank = normalizeConfig({ gatingExitTrigger: ["", "  ", "OK:"] });
+  assert.deepEqual(blank.config.gatingExitTrigger, ["OK:"]);
   assertErrors(blank, [
     "gatingExitTrigger: empty trigger prefix is not allowed",
     "gatingExitTrigger: empty trigger prefix is not allowed",
   ]);
 
-  const nonArray = normalizeConfig({ gatingExitTrigger: "/x" });
+  const nonArray = normalizeConfig({ gatingExitTrigger: "EXIT:" });
   assert.deepEqual(nonArray.config.gatingExitTrigger, ["/skill:normal-mode"]);
   assertErrors(nonArray, [
     'gatingExitTrigger: expected an array of non-empty trigger strings (e.g. ["/skill:plan-mode"])',
   ]);
 
-  const mixed = normalizeConfig({ gatingExitTrigger: ["/a", 7] });
-  assert.deepEqual(mixed.config.gatingExitTrigger, ["/a"]);
+  const mixed = normalizeConfig({ gatingExitTrigger: ["EXIT:", 7] });
+  assert.deepEqual(mixed.config.gatingExitTrigger, ["EXIT:"]);
   assertErrors(mixed, ["gatingExitTrigger: ignored non-string entry 7"]);
 });
 
@@ -254,7 +254,7 @@ test("config objects are deeply frozen", () => {
   const r = normalizeConfig({
     presets: { p: ["read"] },
     gatingModes: {
-      m: { trigger: ["/x"], allowTools: ["read"], allowWriteDir: [] },
+      m: { trigger: ["X:"], allowTools: ["read"], allowWriteDir: [] },
     },
   });
   assert.ok(Object.isFrozen(r.config));

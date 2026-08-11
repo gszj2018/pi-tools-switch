@@ -32,6 +32,7 @@ function assertDefaultConfig(config: Config): void {
   assert.deepEqual(config.subagentEnvVars, []);
   assert.deepEqual(config.gatingModes, {});
   assert.equal(config.defaultPreset, undefined);
+  assert.deepEqual(config.gatingExitTrigger, ["/skill:normal-mode"]);
 }
 
 /** Remove the config file (if present) and the empty temp dir, avoiding recursive removal. */
@@ -48,6 +49,7 @@ test("normalizeConfig({}) returns defaults with no errors", () => {
   assert.deepEqual(r.config.subagentEnvVars, []);
   assert.deepEqual(r.config.gatingModes, {});
   assert.equal(r.config.defaultPreset, undefined);
+  assert.deepEqual(r.config.gatingExitTrigger, ["/skill:normal-mode"]);
   assert.deepEqual(r.errors, []);
 });
 
@@ -63,18 +65,24 @@ test("normalizeConfig(valid example) normalizes and stays clean", () => {
     defaultPreset: "my-preset",
     subagentEnvVars: ["PI_SUBAGENT"],
     gatingModes: {
-      "plan-mode": { trigger: "/skill:plan-mode", allowTools: [], allowWriteDir: [".agents/plans"] },
+      "plan-mode": {
+        trigger: ["/skill:plan-mode", "/plan"],
+        allowTools: [],
+        allowWriteDir: [".agents/plans"],
+      },
     },
+    gatingExitTrigger: ["/skill:normal-mode", "/exit"],
   });
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.config.presets["my-preset"], ["read", "grep"]);
   assert.equal(r.config.defaultPreset, "my-preset");
   assert.deepEqual(r.config.subagentEnvVars, ["PI_SUBAGENT"]);
   assert.deepEqual(r.config.gatingModes["plan-mode"], {
-    trigger: "/skill:plan-mode",
+    trigger: ["/skill:plan-mode", "/plan"],
     allowTools: [],
     allowWriteDir: [".agents/plans"],
   });
+  assert.deepEqual(r.config.gatingExitTrigger, ["/skill:normal-mode", "/exit"]);
 });
 
 test("normalizeConfig drops invalid preset entries and dedupes tools", () => {
@@ -118,25 +126,70 @@ test("normalizeConfig validates subagentEnvVars", () => {
 test("normalizeConfig validates gatingModes", () => {
   const r = normalizeConfig({
     gatingModes: {
-      "bad-trigger": { trigger: "" },
+      "no-trigger": { allowTools: [], allowWriteDir: [] },
+      "empty-triggers": { trigger: [], allowTools: [], allowWriteDir: [] },
+      "blank-trigger": { trigger: [""], allowTools: [], allowWriteDir: [] },
+      "legacy-trigger": { trigger: "/x", allowTools: [], allowWriteDir: [] },
       number: 42,
-      ok: { trigger: "/x", allowTools: "nope", allowWriteDir: { a: 1 } },
-      mixed: { trigger: "/y", allowTools: ["read", 3], allowWriteDir: [".a", false] },
+      ok: { trigger: ["/a", "/b"], allowTools: "nope", allowWriteDir: { a: 1 } },
+      mixed: { trigger: ["/y", "", 3], allowTools: ["read", 3], allowWriteDir: [".a", false] },
     },
   });
-  assert.equal(r.config.gatingModes["bad-trigger"], undefined);
+  assert.equal(r.config.gatingModes["no-trigger"], undefined);
+  assert.equal(r.config.gatingModes["empty-triggers"], undefined);
+  assert.equal(r.config.gatingModes["blank-trigger"], undefined);
+  assert.equal(r.config.gatingModes["legacy-trigger"], undefined);
   assert.equal(r.config.gatingModes["number"], undefined);
-  assert.deepEqual(r.config.gatingModes["ok"], { trigger: "/x", allowTools: [], allowWriteDir: [] });
-  assert.deepEqual(r.config.gatingModes["mixed"].allowTools, ["read"]);
-  assert.deepEqual(r.config.gatingModes["mixed"].allowWriteDir, [".a"]);
+  assert.deepEqual(r.config.gatingModes["ok"], { trigger: ["/a", "/b"], allowTools: [], allowWriteDir: [] });
+  assert.deepEqual(r.config.gatingModes["mixed"], { trigger: ["/y"], allowTools: ["read"], allowWriteDir: [".a"] });
   assertErrors(r, [
-    'gatingModes["bad-trigger"]: missing or empty trigger',
+    'gatingModes["no-trigger"]: missing or empty trigger',
+    'gatingModes["empty-triggers"]: missing or empty trigger',
+    'gatingModes["blank-trigger"].trigger: empty trigger prefix is not allowed',
+    'gatingModes["blank-trigger"]: missing or empty trigger',
+    'gatingModes["legacy-trigger"].trigger: expected an array of non-empty trigger strings (e.g. ["/skill:plan-mode"])',
+    'gatingModes["legacy-trigger"]: missing or empty trigger',
     'gatingModes["number"]: expected an object, got number',
     'gatingModes["ok"].allowTools: expected an array of strings, got string',
     'gatingModes["ok"].allowWriteDir: expected an array of strings, got object',
+    'gatingModes["mixed"].trigger: empty trigger prefix is not allowed',
+    'gatingModes["mixed"].trigger: ignored non-string entry 3',
     'gatingModes["mixed"].allowTools: ignored non-string entry 3',
     'gatingModes["mixed"].allowWriteDir: ignored non-string entry false',
   ]);
+});
+
+test("normalizeConfig defaults gatingExitTrigger to the normal-mode skill prefix", () => {
+  const r = normalizeConfig({});
+  assert.deepEqual(r.config.gatingExitTrigger, ["/skill:normal-mode"]);
+  assert.deepEqual(r.errors, []);
+});
+
+test("normalizeConfig validates gatingExitTrigger", () => {
+  const ok = normalizeConfig({ gatingExitTrigger: ["/exit", "/stop"] });
+  assert.deepEqual(ok.config.gatingExitTrigger, ["/exit", "/stop"]);
+  assert.deepEqual(ok.errors, []);
+
+  const empty = normalizeConfig({ gatingExitTrigger: [] });
+  assert.deepEqual(empty.config.gatingExitTrigger, ["/skill:normal-mode"]);
+  assertErrors(empty, ["gatingExitTrigger: must contain at least one non-empty trigger prefix"]);
+
+  const blank = normalizeConfig({ gatingExitTrigger: ["", "  ", "/ok"] });
+  assert.deepEqual(blank.config.gatingExitTrigger, ["/ok"]);
+  assertErrors(blank, [
+    "gatingExitTrigger: empty trigger prefix is not allowed",
+    "gatingExitTrigger: empty trigger prefix is not allowed",
+  ]);
+
+  const nonArray = normalizeConfig({ gatingExitTrigger: "/x" });
+  assert.deepEqual(nonArray.config.gatingExitTrigger, ["/skill:normal-mode"]);
+  assertErrors(nonArray, [
+    'gatingExitTrigger: expected an array of non-empty trigger strings (e.g. ["/skill:plan-mode"])',
+  ]);
+
+  const mixed = normalizeConfig({ gatingExitTrigger: ["/a", 7] });
+  assert.deepEqual(mixed.config.gatingExitTrigger, ["/a"]);
+  assertErrors(mixed, ["gatingExitTrigger: ignored non-string entry 7"]);
 });
 
 test("loadConfigFrom creates an empty config when the file is missing", async () => {
@@ -201,7 +254,7 @@ test("config objects are deeply frozen", () => {
   const r = normalizeConfig({
     presets: { p: ["read"] },
     gatingModes: {
-      m: { trigger: "/x", allowTools: ["read"], allowWriteDir: [] },
+      m: { trigger: ["/x"], allowTools: ["read"], allowWriteDir: [] },
     },
   });
   assert.ok(Object.isFrozen(r.config));
@@ -210,6 +263,7 @@ test("config objects are deeply frozen", () => {
   assert.ok(Object.isFrozen(r.config.gatingModes["m"]));
   assert.ok(Object.isFrozen(r.config.gatingModes["m"].allowTools));
   assert.ok(Object.isFrozen(r.config.subagentEnvVars));
+  assert.ok(Object.isFrozen(r.config.gatingExitTrigger));
   // Mutation attempts throw in strict mode.
   assert.throws(() => {
     (r.config.subagentEnvVars as string[]).push("PI_X");

@@ -16,8 +16,11 @@ import { isBuiltinToolName, isValidPresetName, type BuiltinToolName } from "./ut
 export const CONFIG_FILE_NAME = "tools-switch.json";
 
 export interface GatingModeConfig {
-  trigger: string;
+  /** Input prefixes that activate the mode; any one matching the raw input activates it. */
+  trigger: string[];
+  /** Tools explicitly allowed while the mode is active. */
   allowTools: string[];
+  /** Directories where write/edit are allowed while the mode is active. */
   allowWriteDir: string[];
 }
 
@@ -30,6 +33,8 @@ export interface Config {
   subagentEnvVars: string[];
   /** User-defined gating modes. Names matching built-in modes override them. */
   gatingModes: Record<string, GatingModeConfig>;
+  /** Input prefixes that exit the active gating mode; defaults to the normal-mode skill prefix. */
+  gatingExitTrigger: string[];
 }
 
 /** A normalized config plus the problems found while normalizing it. */
@@ -50,10 +55,14 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+/** Default exit trigger: the normal-mode skill command prefix. */
+export const DEFAULT_GATING_EXIT_TRIGGER: readonly string[] = ["/skill:normal-mode"];
+
 export const DEFAULT_CONFIG: Config = deepFreeze({
   presets: {},
   subagentEnvVars: [],
   gatingModes: {},
+  gatingExitTrigger: [...DEFAULT_GATING_EXIT_TRIGGER],
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -107,21 +116,69 @@ function normalizePresets(value: unknown, errors: string[]): Record<string, stri
   return presets;
 }
 
+/**
+ * Coerce an unknown value to a non-empty trigger-string array. Blank (empty
+ * or whitespace-only) prefixes are rejected with an explicit error; non-string
+ * entries are dropped and reported through `errors`, prefixed by `field`.
+ * Returns the surviving prefixes (possibly empty).
+ */
+function normalizeTriggerList(value: unknown, errors: string[], field: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    errors.push(
+      `${field}: expected an array of non-empty trigger strings (e.g. [\"/skill:plan-mode\"])`,
+    );
+    return [];
+  }
+  const result: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") {
+      errors.push(`${field}: ignored non-string entry ${JSON.stringify(item)}`);
+      continue;
+    }
+    if (item.trim().length === 0) {
+      errors.push(`${field}: empty trigger prefix is not allowed`);
+      continue;
+    }
+    result.push(item);
+  }
+  return result;
+}
+
 function normalizeGatingMode(name: string, value: unknown, errors: string[]): GatingModeConfig | null {
   if (!isRecord(value)) {
     errors.push(`gatingModes["${name}"]: expected an object, got ${typeof value}`);
     return null;
   }
   const { trigger, allowTools, allowWriteDir } = value;
-  if (typeof trigger !== "string" || trigger.length === 0) {
+  const triggers = normalizeTriggerList(trigger, errors, `gatingModes["${name}"].trigger`);
+  if (triggers.length === 0) {
     errors.push(`gatingModes["${name}"]: missing or empty trigger`);
     return null;
   }
   return {
-    trigger,
+    trigger: triggers,
     allowTools: toStringArray(allowTools, errors, `gatingModes["${name}"].allowTools`),
     allowWriteDir: toStringArray(allowWriteDir, errors, `gatingModes["${name}"].allowWriteDir`),
   };
+}
+
+/**
+ * Normalize gatingExitTrigger: absent -> the default normal-mode skill prefix;
+ * present -> a non-empty trigger list, falling back to the default when the
+ * value is invalid or yields no usable prefix.
+ */
+function normalizeExitTrigger(value: unknown, errors: string[]): string[] {
+  const field = "gatingExitTrigger";
+  if (value === undefined) return [...DEFAULT_GATING_EXIT_TRIGGER];
+  const triggers = normalizeTriggerList(value, errors, field);
+  if (triggers.length === 0) {
+    if (Array.isArray(value)) {
+      errors.push(`${field}: must contain at least one non-empty trigger prefix`);
+    }
+    return [...DEFAULT_GATING_EXIT_TRIGGER];
+  }
+  return triggers;
 }
 
 function normalizeGatingModes(value: unknown, errors: string[]): Record<string, GatingModeConfig> {
@@ -165,6 +222,7 @@ export function normalizeConfig(data: unknown): ConfigLoadResult {
           : undefined,
       subagentEnvVars: toStringArray(data.subagentEnvVars, errors, "subagentEnvVars"),
       gatingModes: normalizeGatingModes(data.gatingModes, errors),
+      gatingExitTrigger: normalizeExitTrigger(data.gatingExitTrigger, errors),
     }),
     errors,
   };

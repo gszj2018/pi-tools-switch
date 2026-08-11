@@ -15,7 +15,7 @@ const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
 /** Built-in gating modes, keyed by mode name. User modes with the same name override them. */
 export const BUILTIN_GATING_MODES: Record<string, GatingModeConfig> = {
   plan: {
-    trigger: "/skill:plan-mode",
+    trigger: ["/skill:plan-mode"],
     allowTools: [],
     allowWriteDir: [".agents/plans"],
   },
@@ -28,13 +28,18 @@ export function mergeGatingModes(
   return { ...BUILTIN_GATING_MODES, ...userModes };
 }
 
+/** Return true when any non-empty trigger is a prefix of `text`. */
+export function matchAnyTrigger(text: string, triggers: readonly string[]): boolean {
+  return triggers.some((trigger) => trigger.length > 0 && text.startsWith(trigger));
+}
+
 /** Return the first mode whose trigger is a prefix of `text`, if any. */
 export function matchTrigger(
   text: string,
   modes: Record<string, GatingModeConfig>,
 ): string | undefined {
   for (const [name, mode] of Object.entries(modes)) {
-    if (mode.trigger.length > 0 && text.startsWith(mode.trigger)) return name;
+    if (matchAnyTrigger(text, mode.trigger)) return name;
   }
   return undefined;
 }
@@ -314,7 +319,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
             mode.allowTools.length > 0 ? `, allow: ${mode.allowTools.join(", ")}` : "";
           const dirs =
             mode.allowWriteDir.length > 0 ? `, write: ${mode.allowWriteDir.join(", ")}` : "";
-          return `${n}  trigger: ${mode.trigger}${allowTools}${dirs}`;
+          return `${n}  trigger: ${mode.trigger.join(", ")}${allowTools}${dirs}`;
         });
         ctx.ui.notify(lines.join("\n"), "info");
         return;
@@ -327,7 +332,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
       ctx.ui.notify(
         [
           `Mode: ${name}`,
-          `  trigger: ${mode.trigger}`,
+          `  trigger: ${mode.trigger.join(", ")}`,
           `  allowTools: ${mode.allowTools.length > 0 ? mode.allowTools.join(", ") : "(none)"}`,
           `  allowWriteDir: ${
             mode.allowWriteDir.length > 0 ? mode.allowWriteDir.join(", ") : "(none)"

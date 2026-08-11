@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://pi.dev/schemas/tools-switch.json",
   "title": "pi-tools-switch configuration",
-  "description": "Configuration for the pi-tools-switch extension: user-defined presets, default preset, subagent environment variables, and custom gating modes. Loaded from <agentDir>/tools-switch.json.",
+  "description": "Configuration for the pi-tools-switch extension: user-defined presets, default preset, subagent environment variables, custom gating modes, and the gating exit trigger. Loaded from <agentDir>/tools-switch.json.",
   "type": "object",
   "properties": {
     "presets": {
@@ -38,13 +38,18 @@
     },
     "gatingModes": {
       "type": "object",
-      "description": "User-defined gating modes. Keys are mode names. Each mode defines a trigger prefix, explicitly allowed tools, and allowed write directories. Modes with the same name override built-in modes.",
+      "description": "User-defined gating modes. Keys are mode names. Each mode defines trigger prefixes, explicitly allowed tools, and allowed write directories. Modes with the same name override built-in modes.",
       "additionalProperties": {
         "type": "object",
         "properties": {
           "trigger": {
-            "type": "string",
-            "description": "Input prefix that activates the mode. Matched against raw input text before skill/template expansion."
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Input prefixes that activate the mode; any one matching the raw input (before skill/template expansion) activates it. Empty prefixes are rejected."
           },
           "allowTools": {
             "type": "array",
@@ -68,6 +73,15 @@
         ],
         "additionalProperties": false
       }
+    },
+    "gatingExitTrigger": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Input prefixes that exit the active gating mode. Defaults to [\"/skill:normal-mode\"] when omitted. Empty prefixes are rejected."
     }
   },
   "additionalProperties": true

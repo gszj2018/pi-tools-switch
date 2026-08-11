@@ -125,7 +125,7 @@ interface FinishToolResult {
 const EXPLORE_CONFIG: Config = {
   ...DEFAULT_CONFIG,
   gatingModes: {
-    explore: { trigger: "/skill:explore", allowTools: [], allowWriteDir: [] },
+    explore: { trigger: ["/skill:explore"], allowTools: [], allowWriteDir: [] },
   },
 };
 

@@ -350,13 +350,9 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     description: "List all gating modes and exit triggers",
     handler: async (args, ctx) => {
       if (rejectUnexpectedArgs(args, "/ptsw-mode-list", ctx)) return;
-      const lines = Object.entries(modes).map(([name, mode]) => {
-        const allowTools =
-          mode.allowTools.length > 0 ? `, allow: ${mode.allowTools.join(", ")}` : "";
-        const dirs =
-          mode.allowWriteDir.length > 0 ? `, write: ${mode.allowWriteDir.join(", ")}` : "";
-        return `${name}  trigger: ${mode.trigger.join(", ")}${allowTools}${dirs}`;
-      });
+      const lines = Object.entries(modes).map(
+        ([name, mode]) => `${name} trigger: ${mode.trigger.join(", ")}`,
+      );
       lines.push(`exit trigger: ${exitTriggers.join(", ")}`);
       ctx.ui.notify(lines.join("\n"), "info");
     },

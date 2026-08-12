@@ -334,9 +334,18 @@ test("mode list and show preserve summaries, details, and validation", async () 
   await mock.invoke("ptsw-mode-list");
   const list = lastNotification(mock.notifications);
   assert.equal(list.level, "info");
-  assert.match(list.message, /plan {2}trigger: \/skill:plan-mode/);
-  assert.match(list.message, /review {2}trigger: REVIEW:/);
-  assert.match(list.message, /exit trigger: NORMAL:/);
+  assert.equal(
+    list.message,
+    [
+      "plan trigger: /skill:plan-mode",
+      "review trigger: REVIEW:",
+      "exit trigger: NORMAL:",
+    ].join("\n"),
+  );
+  assert.ok(!list.message.includes("allow:"));
+  assert.ok(!list.message.includes("write:"));
+  assert.ok(!list.message.includes("allowTools"));
+  assert.ok(!list.message.includes("allowWriteDir"));
 
   await mock.invoke("ptsw-mode-show", "review");
   const details = lastNotification(mock.notifications);

@@ -5,11 +5,7 @@
  * Module-local state only: reads tool state via pi.getActiveTools() and owns
  * the "pi-tools-switch-status" status bar. No shared mutable state.
  */
-import type {
-  ExtensionAPI,
-  ExtensionCommandContext,
-  ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import {
   BUILTIN_TOOL_NAMES,
@@ -19,6 +15,7 @@ import {
   type BuiltinToolName,
 } from "./utils.ts";
 import type { Config } from "./config.ts";
+import { rejectUnexpectedArgs } from "./utils-pi.ts";
 
 const STATUS_BAR_KEY = "pi-tools-switch-status";
 
@@ -229,16 +226,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     const next = applyPreset(pi.getActiveTools(), tools);
     pi.setActiveTools(next);
     return { next, ok: true };
-  };
-
-  const rejectUnexpectedArgs = (
-    args: string,
-    usage: string,
-    ctx: ExtensionCommandContext,
-  ): boolean => {
-    if (args.trim() === "") return false;
-    ctx.ui.notify(`Unexpected arguments. Usage: ${usage}`, "error");
-    return true;
   };
 
   pi.registerCommand("ptsw-builtin-status", {

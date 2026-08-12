@@ -10,6 +10,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { READ_ONLY_TOOLS, isPathInDirs, resolveDir } from "./utils.ts";
+import { rejectUnexpectedArgs } from "./utils-pi.ts";
 import type { Config, GatingModeConfig } from "./config.ts";
 
 const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
@@ -348,10 +349,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   pi.registerCommand("ptsw-mode-list", {
     description: "List all gating modes and exit triggers",
     handler: async (args, ctx) => {
-      if (args.trim() !== "") {
-        ctx.ui.notify("Unexpected arguments. Usage: /ptsw-mode-list", "error");
-        return;
-      }
+      if (rejectUnexpectedArgs(args, "/ptsw-mode-list", ctx)) return;
       const lines = Object.entries(modes).map(([name, mode]) => {
         const allowTools =
           mode.allowTools.length > 0 ? `, allow: ${mode.allowTools.join(", ")}` : "";

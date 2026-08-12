@@ -24,6 +24,8 @@ interface Notification {
   level?: string;
 }
 
+type EventHandler = (event: unknown, ctx: ExtensionCommandContext) => unknown | Promise<unknown>;
+
 const TEST_CONFIG: Config = {
   ...DEFAULT_CONFIG,
   presets: {
@@ -46,12 +48,10 @@ const TARGET_COMMANDS = [
   "ptsw-builtin-disable",
   "ptsw-builtin-reset",
   "ptsw-preset-list",
-  "ptsw-preset-set",
+  "ptsw-preset-apply",
   "ptsw-mode-list",
   "ptsw-mode-show",
 ] as const;
-
-const LEGACY_COMMANDS = ["tools-switch", "tools-preset", "tools-mode-info"] as const;
 
 function createMockCtx() {
   const notifications: Notification[] = [];
@@ -86,10 +86,15 @@ function createMockPi(initialActiveTools: string[] = ["read", "external_tool"]) 
     "external_tool",
   ];
   const commands = new Map<string, CommandDefinition>();
+  const eventHandlers = new Map<string, EventHandler[]>();
 
   // noinspection JSUnusedGlobalSymbols
   const pi = {
-    on: () => {},
+    on(eventName: string, handler: EventHandler) {
+      const handlers = eventHandlers.get(eventName) ?? [];
+      handlers.push(handler);
+      eventHandlers.set(eventName, handlers);
+    },
     registerCommand(name: string, definition: CommandDefinition) {
       commands.set(name, definition);
     },
@@ -110,6 +115,11 @@ function createMockPi(initialActiveTools: string[] = ["read", "external_tool"]) 
     setActiveTools(next: string[]) {
       activeTools = [...next];
     },
+    async emit(eventName: string, ctx: ExtensionCommandContext): Promise<void> {
+      for (const handler of eventHandlers.get(eventName) ?? []) {
+        await handler({}, ctx);
+      }
+    },
   };
 }
 
@@ -125,7 +135,9 @@ function setup(config: Config = TEST_CONFIG) {
     await command.handler(args, context.ctx);
   };
 
-  return { ...mock, ...context, invoke };
+  const emit = async (eventName: string): Promise<void> => mock.emit(eventName, context.ctx);
+
+  return { ...mock, ...context, invoke, emit };
 }
 
 function lastNotification(notifications: Notification[]): Notification {
@@ -134,13 +146,11 @@ function lastNotification(notifications: Notification[]): Notification {
   return notification;
 }
 
-test("registers exactly the eight split commands and removes legacy commands", () => {
+test("registers exactly the eight expected commands", () => {
   const mock = setup();
   assert.deepEqual([...mock.commands.keys()], TARGET_COMMANDS);
-  for (const name of LEGACY_COMMANDS) assert.equal(mock.commands.has(name), false);
   for (const command of mock.commands.values()) {
     assert.ok(command.description && command.description.length > 0);
-    assert.ok(!LEGACY_COMMANDS.some((legacy) => command.description!.includes(legacy)));
   }
 });
 
@@ -158,7 +168,7 @@ test("binds completions only to commands that accept completable arguments", () 
   ]);
 
   const presetValues = mock.commands
-    .get("ptsw-preset-set")!
+    .get("ptsw-preset-apply")!
     .getArgumentCompletions?.("")
     ?.map((item) => item.value);
   assert.ok(presetValues?.includes("explore"));
@@ -256,7 +266,7 @@ test("ptsw-builtin-reset does not mutate tools without an effective default", as
   });
 });
 
-test("preset list and set preserve listing, validation, and application behavior", async () => {
+test("preset list and apply preserve listing, validation, and application behavior", async () => {
   const mock = setup();
   await mock.invoke("ptsw-preset-list");
   const list = lastNotification(mock.notifications);
@@ -265,22 +275,58 @@ test("preset list and set preserve listing, validation, and application behavior
   assert.match(list.message, /\[R----G-] custom/);
 
   mock.setActiveTools(["bash", "external_tool"]);
-  await mock.invoke("ptsw-preset-set", "custom");
+  await mock.invoke("ptsw-preset-apply", "custom");
   assert.deepEqual(mock.activeTools(), ["external_tool", "read", "grep"]);
   assert.match(lastNotification(mock.notifications).message, /Preset "custom" applied/);
+  assert.deepEqual(mock.statuses.at(-1), {
+    key: "pi-tools-switch-status",
+    value: "[R----G-] [D: custom]",
+  });
+
+  mock.setActiveTools(["bash", "external_tool"]);
+  await mock.invoke("ptsw-builtin-reset");
+  assert.deepEqual(mock.activeTools(), ["external_tool", "read", "grep"]);
+  assert.match(lastNotification(mock.notifications).message, /Restored preset "custom"/);
 
   const applied = mock.activeTools();
-  await mock.invoke("ptsw-preset-set", "");
+  await mock.invoke("ptsw-preset-apply", "");
   assert.deepEqual(mock.activeTools(), applied);
   assert.match(lastNotification(mock.notifications).message, /Missing preset name/);
 
-  await mock.invoke("ptsw-preset-set", "Bad Name");
+  await mock.invoke("ptsw-preset-apply", "Bad Name");
   assert.deepEqual(mock.activeTools(), applied);
   assert.match(lastNotification(mock.notifications).message, /Invalid preset name/);
 
-  await mock.invoke("ptsw-preset-set", "missing");
+  await mock.invoke("ptsw-preset-apply", "missing");
   assert.deepEqual(mock.activeTools(), applied);
   assert.match(lastNotification(mock.notifications).message, /Unknown preset: missing/);
+
+  mock.setActiveTools(["bash", "external_tool"]);
+  await mock.invoke("ptsw-builtin-reset");
+  assert.deepEqual(mock.activeTools(), ["external_tool", "read", "grep"]);
+  assert.match(lastNotification(mock.notifications).message, /Restored preset "custom"/);
+});
+
+test("preset apply remains session-scoped and does not mutate config", async () => {
+  const config: Config = {
+    ...TEST_CONFIG,
+    presets: { ...TEST_CONFIG.presets },
+  };
+  const mock = setup(config);
+
+  await mock.invoke("ptsw-preset-apply", "custom");
+  assert.equal(config.defaultPreset, "explore");
+  assert.deepEqual(config.presets, { custom: ["read", "grep"] });
+
+  await mock.emit("session_start");
+  assert.deepEqual(mock.activeTools(), ["external_tool", "read", "find", "grep", "ls"]);
+  assert.deepEqual(
+    mock.statuses.filter(({ key }) => key === "pi-tools-switch-status").at(-1),
+    {
+      key: "pi-tools-switch-status",
+      value: "[R---FGL] [D: explore]",
+    },
+  );
 });
 
 test("mode list and show preserve summaries, details, and validation", async () => {

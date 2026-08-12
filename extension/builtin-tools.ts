@@ -208,15 +208,18 @@ function presetNameCompletions(
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   // Config-derived state cached once at load time (rebuilt on extension reload).
   const presets = mergePresets(getConfig().presets);
-  // Effective default preset resolved once at the factory layer: it depends
-  // only on the frozen config, and index.ts never registers this module for
-  // subagents, so nothing session-specific remains to resolve later.
+  // Configured default preset resolved once at the factory layer. It is the
+  // immutable baseline for each new session; index.ts never registers this
+  // module for subagents.
   const effectiveDefault = getEffectiveDefaultPreset(getConfig().defaultPreset, presets);
+  // This runtime value starts from the configured default, but a successful
+  // preset-apply command may change it for the current session only.
+  let currentEffectiveDefaultPreset = effectiveDefault.preset;
 
   const refreshStatus = (ctx: ExtensionContext): void => {
     ctx.ui.setStatus(
       STATUS_BAR_KEY,
-      `${computeStatusBar(pi.getActiveTools())} ${formatDefaultStatus(effectiveDefault.preset)}`,
+      `${computeStatusBar(pi.getActiveTools())} ${formatDefaultStatus(currentEffectiveDefaultPreset)}`,
     );
   };
 
@@ -280,18 +283,18 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     description: "Restore the effective default preset",
     handler: async (args, ctx) => {
       if (rejectUnexpectedArgs(args, "/ptsw-builtin-reset", ctx)) return;
-      if (!effectiveDefault.preset) {
+      if (!currentEffectiveDefaultPreset) {
         ctx.ui.notify("No default preset configured", "warning");
         return;
       }
-      const result = applyPresetByName(effectiveDefault.preset);
+      const result = applyPresetByName(currentEffectiveDefaultPreset);
       if (!result.ok) {
         ctx.ui.notify(result.error ?? "Unknown preset", "error");
         return;
       }
       refreshStatus(ctx);
       ctx.ui.notify(
-        `Restored preset "${effectiveDefault.preset}" (${computeStatusBar(result.next)})`,
+        `Restored preset "${currentEffectiveDefaultPreset}" (${computeStatusBar(result.next)})`,
         "info",
       );
     },
@@ -306,13 +309,13 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     },
   });
 
-  pi.registerCommand("ptsw-preset-set", {
-    description: "Apply a tool preset: /ptsw-preset-set <name>",
+  pi.registerCommand("ptsw-preset-apply", {
+    description: "Apply a tool preset: /ptsw-preset-apply <name>",
     getArgumentCompletions: (prefix) => presetNameCompletions(prefix, presets),
     handler: async (args, ctx) => {
       const name = args.trim();
       if (name === "") {
-        ctx.ui.notify("Missing preset name. Usage: /ptsw-preset-set <name>", "error");
+        ctx.ui.notify("Missing preset name. Usage: /ptsw-preset-apply <name>", "error");
         return;
       }
       if (!isValidPresetName(name)) {
@@ -327,14 +330,16 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
         ctx.ui.notify(result.error ?? "Unknown preset", "error");
         return;
       }
+      currentEffectiveDefaultPreset = name;
       refreshStatus(ctx);
       ctx.ui.notify(`Preset "${name}" applied. Status: ${computeStatusBar(result.next)}`, "info");
     },
   });
 
   pi.on("session_start", async (_event, ctx) => {
-    if (effectiveDefault.preset) {
-      const result = applyPresetByName(effectiveDefault.preset);
+    currentEffectiveDefaultPreset = effectiveDefault.preset;
+    if (currentEffectiveDefaultPreset) {
+      const result = applyPresetByName(currentEffectiveDefaultPreset);
       if (!result.ok) {
         ctx.ui.notify(result.error ?? "Unknown preset", "error");
       }

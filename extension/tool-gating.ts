@@ -345,25 +345,36 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     refreshStatus(ctx);
   });
 
-  pi.registerCommand("tools-mode-info", {
-    description: "Show gating modes, or one mode's details: /tools-mode-info [<name>]",
+  pi.registerCommand("ptsw-mode-list", {
+    description: "List all gating modes and exit triggers",
+    handler: async (args, ctx) => {
+      if (args.trim() !== "") {
+        ctx.ui.notify("Unexpected arguments. Usage: /ptsw-mode-list", "error");
+        return;
+      }
+      const lines = Object.entries(modes).map(([name, mode]) => {
+        const allowTools =
+          mode.allowTools.length > 0 ? `, allow: ${mode.allowTools.join(", ")}` : "";
+        const dirs =
+          mode.allowWriteDir.length > 0 ? `, write: ${mode.allowWriteDir.join(", ")}` : "";
+        return `${name}  trigger: ${mode.trigger.join(", ")}${allowTools}${dirs}`;
+      });
+      lines.push(`exit trigger: ${exitTriggers.join(", ")}`);
+      ctx.ui.notify(lines.join("\n"), "info");
+    },
+  });
+
+  pi.registerCommand("ptsw-mode-show", {
+    description: "Show gating mode details: /ptsw-mode-show <name>",
     getArgumentCompletions: (prefix) => {
       const items = Object.keys(modes).map((name) => ({ value: name, label: name }));
       const filtered = items.filter((item) => item.value.startsWith(prefix));
       return filtered.length > 0 ? filtered : null;
     },
     handler: async (args, ctx) => {
-      const name = args?.trim() ?? "";
+      const name = args.trim();
       if (name === "") {
-        const lines = Object.entries(modes).map(([n, mode]) => {
-          const allowTools =
-            mode.allowTools.length > 0 ? `, allow: ${mode.allowTools.join(", ")}` : "";
-          const dirs =
-            mode.allowWriteDir.length > 0 ? `, write: ${mode.allowWriteDir.join(", ")}` : "";
-          return `${n}  trigger: ${mode.trigger.join(", ")}${allowTools}${dirs}`;
-        });
-        lines.push(`exit trigger: ${exitTriggers.join(", ")}`);
-        ctx.ui.notify(lines.join("\n"), "info");
+        ctx.ui.notify("Missing mode name. Usage: /ptsw-mode-show <name>", "error");
         return;
       }
       const mode = modes[name];

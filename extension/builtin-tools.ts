@@ -155,6 +155,46 @@ export function formatToolsStatus(
     .join("\n");
 }
 
+export function builtinToolCompletions(prefix: string): AutocompleteItem[] | null {
+  const parts = prefix.split(/\s+/);
+  // Drop only trailing empty tokens produced by trailing whitespace. The
+  // original prefix remains unchanged so completion values can preserve the
+  // full accumulated argument list Pi replaces in the editor.
+  while (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
+
+  if (parts.length === 0) {
+    return BUILTIN_TOOL_NAMES.map((tool) => ({ value: tool, label: tool }));
+  }
+
+  const completeTokens = parts.slice(0, -1);
+  const last = parts[parts.length - 1];
+  if (completeTokens.some((tool) => !isBuiltinToolName(tool))) return null;
+
+  // Without trailing whitespace, a complete tool name remains in the current
+  // completion stage. Requiring a space before offering another tool preserves
+  // the existing workaround for pi-tui cursor behavior.
+  if (isBuiltinToolName(last) && !prefix.endsWith(" ")) {
+    const items = BUILTIN_TOOL_NAMES.filter((tool) => tool.startsWith(last)).map((tool) => ({
+      value: [...completeTokens, tool].join(" "),
+      label: tool,
+    }));
+    const filtered = items.filter((item) => item.value.startsWith(prefix));
+    return filtered.length > 0 ? filtered : null;
+  }
+
+  const selected = isBuiltinToolName(last) ? [...completeTokens, last] : completeTokens;
+  const used = new Set(selected);
+  const remaining = BUILTIN_TOOL_NAMES.filter((tool) => !used.has(tool));
+  if (remaining.length === 0) return null;
+
+  const items = remaining.map((tool) => ({
+    value: [...selected, tool].join(" "),
+    label: tool,
+  }));
+  const filtered = items.filter((item) => item.value.startsWith(prefix));
+  return filtered.length > 0 ? filtered : null;
+}
+
 export function toolsSwitchCompletions(prefix: string): AutocompleteItem[] | null {
   const parts = prefix.split(/\s+/);
   const first = parts[0] ?? "";

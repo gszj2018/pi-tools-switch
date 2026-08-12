@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  builtinToolCompletions,
   getEffectiveDefaultPreset,
   mergePresets,
   toggleBuiltinTools,
@@ -58,6 +59,48 @@ test("validateBuiltinTools handles empty and all-invalid lists", () => {
   assert.equal(allInvalid.ok, false);
   assert.deepEqual(allInvalid.tools, []);
   assert.deepEqual(allInvalid.invalid, ["nope", "wat"]);
+});
+
+test("builtinToolCompletions suggests built-in tools for empty and partial prefixes", () => {
+  const items = builtinToolCompletions("");
+  assert.deepEqual(items?.map((item) => item.value), [
+    "read",
+    "write",
+    "edit",
+    "bash",
+    "find",
+    "grep",
+    "ls",
+  ]);
+  assert.deepEqual(builtinToolCompletions("r"), [{ value: "read", label: "read" }]);
+  assert.equal(builtinToolCompletions("unknown"), null);
+});
+
+test("builtinToolCompletions requires trailing space before appending tools", () => {
+  assert.deepEqual(builtinToolCompletions("read"), [{ value: "read", label: "read" }]);
+
+  const append = builtinToolCompletions("read ");
+  assert.equal(append?.length, 6);
+  assert.ok(!append?.some((item) => item.label === "read"));
+  assert.deepEqual(append?.[0], { value: "read write", label: "write" });
+});
+
+test("builtinToolCompletions accumulates multiple tool arguments", () => {
+  assert.deepEqual(builtinToolCompletions("read w"), [
+    { value: "read write", label: "write" },
+  ]);
+  assert.deepEqual(builtinToolCompletions("read write"), [
+    { value: "read write", label: "write" },
+  ]);
+
+  const append = builtinToolCompletions("read write ");
+  assert.ok(append?.some((item) => item.value === "read write edit"));
+  assert.ok(!append?.some((item) => item.label === "read" || item.label === "write"));
+});
+
+test("builtinToolCompletions rejects invalid completed tokens and stops when exhausted", () => {
+  assert.equal(builtinToolCompletions("readx write "), null);
+  assert.equal(builtinToolCompletions("read write edit bash find grep ls "), null);
 });
 
 test("toolsSwitchCompletions suggests subcommands with appropriate spacing", () => {

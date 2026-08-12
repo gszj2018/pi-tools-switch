@@ -5,7 +5,11 @@
  * Module-local state only: reads tool state via pi.getActiveTools() and owns
  * the "pi-tools-switch-status" status bar. No shared mutable state.
  */
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionCommandContext,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import {
   BUILTIN_TOOL_NAMES,
@@ -195,74 +199,6 @@ export function builtinToolCompletions(prefix: string): AutocompleteItem[] | nul
   return filtered.length > 0 ? filtered : null;
 }
 
-export function toolsSwitchCompletions(prefix: string): AutocompleteItem[] | null {
-  const parts = prefix.split(/\s+/);
-  const first = parts[0] ?? "";
-  if (parts.length <= 1) {
-    // Subcommand stage: enable/disable carry a trailing space (more arguments
-    // follow), default does not. The prefix is not trimmed so the space
-    // survives the round-trip into the tool stage.
-    const items = [
-      { value: "enable ", label: "enable" },
-      { value: "disable ", label: "disable" },
-      { value: "default", label: "default" },
-    ];
-    const filtered = items.filter((item) => item.value.startsWith(prefix));
-    return filtered.length > 0 ? filtered : null;
-  }
-  if (first !== "enable" && first !== "disable") return null;
-
-  // Tool stage: append-only completion. Each value carries the full
-  // accumulated argument list (subcommand + already-chosen tools + the new
-  // tool) because the autocomplete replaces the whole prefix. Already-chosen
-  // tools are excluded so each tool can be added at most once. All tokens
-  // except the last one must be complete valid tool names; the last token is
-  // treated as an in-progress prefix and only used for filtering.
-  const tokens = parts.slice(1);
-  // Drop only the trailing empty token produced by a trailing space.
-  while (tokens.length > 0 && tokens[tokens.length - 1] === "") tokens.pop();
-  if (tokens.length === 0) {
-    const items = BUILTIN_TOOL_NAMES.map((tool) => ({
-      value: `${first} ${tool}`,
-      label: tool,
-    }));
-    const filtered = items.filter((item) => item.value.startsWith(prefix));
-    return filtered.length > 0 ? filtered : null;
-  }
-  const completeTokens = tokens.slice(0, -1);
-  const last = tokens[tokens.length - 1];
-  if (completeTokens.some((tool) => !isBuiltinToolName(tool))) return null;
-
-  // A complete tool name without a trailing space is still being typed (or
-  // just finished): complete it without appending, keeping any earlier tools
-  // in the accumulated value. The user must type a space to confirm it and
-  // move into the append stage. This also avoids the pi-tui cursor bug that
-  // leaves completions unresponsive after selection.
-  if (isBuiltinToolName(last) && !prefix.endsWith(" ")) {
-    const items = BUILTIN_TOOL_NAMES.filter((tool) => tool.startsWith(last)).map((tool) => ({
-      value: `${first} ${[...completeTokens, tool].join(" ")}`,
-      label: tool,
-    }));
-    const filtered = items.filter((item) => item.value.startsWith(prefix));
-    return filtered.length > 0 ? filtered : null;
-  }
-
-  // Append stage: each value carries the full accumulated argument list
-  // (subcommand + already-chosen tools + the new tool) because the
-  // autocomplete replaces the whole prefix. Already-chosen tools are excluded
-  // so each tool can be added at most once.
-  const selected = isBuiltinToolName(last) ? [...completeTokens, last] : completeTokens;
-  const used = new Set(selected);
-  const remaining = BUILTIN_TOOL_NAMES.filter((tool) => !used.has(tool));
-  if (remaining.length === 0) return null;
-  const items = remaining.map((tool) => ({
-    value: `${first} ${[...selected, tool].join(" ")}`,
-    label: tool,
-  }));
-  const filtered = items.filter((item) => item.value.startsWith(prefix));
-  return filtered.length > 0 ? filtered : null;
-}
-
 function presetNameCompletions(
   prefix: string,
   presets: Record<string, readonly string[]>,
@@ -295,72 +231,101 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     return { next, ok: true };
   };
 
-  pi.registerCommand("tools-switch", {
-    description:
-      "Show tool status, or run a subcommand: enable <tool> ... | disable <tool> ... | default",
-    getArgumentCompletions: toolsSwitchCompletions,
+  const rejectUnexpectedArgs = (
+    args: string,
+    usage: string,
+    ctx: ExtensionCommandContext,
+  ): boolean => {
+    if (args.trim() === "") return false;
+    ctx.ui.notify(`Unexpected arguments. Usage: ${usage}`, "error");
+    return true;
+  };
+
+  pi.registerCommand("ptsw-builtin-status", {
+    description: "Show all tool status",
     handler: async (args, ctx) => {
-      const parts = (args ?? "").trim().split(/\s+/).filter(Boolean);
-      const [sub, ...tools] = parts;
-      if (!sub) {
-        ctx.ui.notify(formatToolsStatus(pi.getActiveTools(), pi.getAllTools()), "info");
-        return;
-      }
-      if (sub === "default") {
-        if (!effectiveDefault.preset) {
-          ctx.ui.notify("No default preset configured", "warning");
-          return;
-        }
-        const result = applyPresetByName(effectiveDefault.preset);
-        if (!result.ok) {
-          ctx.ui.notify(result.error ?? "Unknown preset", "error");
-          return;
-        }
-        refreshStatus(ctx);
-        ctx.ui.notify(
-          `Restored preset "${effectiveDefault.preset}" (${computeStatusBar(result.next)})`,
-          "info",
-        );
-        return;
-      }
-      if (sub !== "enable" && sub !== "disable") {
-        ctx.ui.notify(
-          `Unknown subcommand "${sub}". Usage: /tools-switch [enable|disable <tool> ...]`,
-          "error",
-        );
-        return;
-      }
-      if (tools.length === 0) {
-        ctx.ui.notify(
-          `Missing tool name. Usage: /tools-switch ${sub} <tool> [<tool> ...]`,
-          "error",
-        );
-        return;
-      }
-      // Validate every tool first; abort the whole command on any invalid name.
-      const validation = validateBuiltinTools(tools);
-      if (!validation.ok) {
-        ctx.ui.notify(
-          `Invalid tool(s): ${validation.invalid.join(", ")}. Available: ${BUILTIN_TOOL_NAMES.join(", ")}`,
-          "error",
-        );
-        return;
-      }
-      const next = toggleBuiltinTools(pi.getActiveTools(), validation.tools, sub === "enable");
-      pi.setActiveTools(next);
-      refreshStatus(ctx);
-      ctx.ui.notify(`${sub}d ${tools.join(", ")}. Status: ${computeStatusBar(next)}`, "info");
+      if (rejectUnexpectedArgs(args, "/ptsw-builtin-status", ctx)) return;
+      ctx.ui.notify(formatToolsStatus(pi.getActiveTools(), pi.getAllTools()), "info");
     },
   });
 
-  pi.registerCommand("tools-preset", {
-    description: "List presets, or apply one: /tools-preset <name>",
+  const registerToolToggleCommand = (enabled: boolean): void => {
+    const action = enabled ? "enable" : "disable";
+    const commandName = `ptsw-builtin-${action}`;
+    pi.registerCommand(commandName, {
+      description: `${enabled ? "Enable" : "Disable"} one or more built-in tools: /${commandName} <tool> [...]`,
+      getArgumentCompletions: builtinToolCompletions,
+      handler: async (args, ctx) => {
+        const tools = args.trim().split(/\s+/).filter(Boolean);
+        if (tools.length === 0) {
+          ctx.ui.notify(
+            `Missing tool name. Usage: /${commandName} <tool> [<tool> ...]`,
+            "error",
+          );
+          return;
+        }
+
+        // Validate every tool first; abort the whole command on any invalid name.
+        const validation = validateBuiltinTools(tools);
+        if (!validation.ok) {
+          ctx.ui.notify(
+            `Invalid tool(s): ${validation.invalid.join(", ")}. Available: ${BUILTIN_TOOL_NAMES.join(", ")}`,
+            "error",
+          );
+          return;
+        }
+
+        const next = toggleBuiltinTools(pi.getActiveTools(), validation.tools, enabled);
+        pi.setActiveTools(next);
+        refreshStatus(ctx);
+        ctx.ui.notify(
+          `${enabled ? "Enabled" : "Disabled"} ${tools.join(", ")}. Status: ${computeStatusBar(next)}`,
+          "info",
+        );
+      },
+    });
+  };
+
+  registerToolToggleCommand(true);
+  registerToolToggleCommand(false);
+
+  pi.registerCommand("ptsw-builtin-reset", {
+    description: "Restore the effective default preset",
+    handler: async (args, ctx) => {
+      if (rejectUnexpectedArgs(args, "/ptsw-builtin-reset", ctx)) return;
+      if (!effectiveDefault.preset) {
+        ctx.ui.notify("No default preset configured", "warning");
+        return;
+      }
+      const result = applyPresetByName(effectiveDefault.preset);
+      if (!result.ok) {
+        ctx.ui.notify(result.error ?? "Unknown preset", "error");
+        return;
+      }
+      refreshStatus(ctx);
+      ctx.ui.notify(
+        `Restored preset "${effectiveDefault.preset}" (${computeStatusBar(result.next)})`,
+        "info",
+      );
+    },
+  });
+
+  pi.registerCommand("ptsw-preset-list", {
+    description: "List all tool presets",
+    handler: async (args, ctx) => {
+      if (rejectUnexpectedArgs(args, "/ptsw-preset-list", ctx)) return;
+      const lines = Object.entries(presets).map(([name, tools]) => formatPresetLine(name, tools));
+      ctx.ui.notify(lines.join("\n"), "info");
+    },
+  });
+
+  pi.registerCommand("ptsw-preset-set", {
+    description: "Apply a tool preset: /ptsw-preset-set <name>",
     getArgumentCompletions: (prefix) => presetNameCompletions(prefix, presets),
     handler: async (args, ctx) => {
-      const name = args?.trim() ?? "";
+      const name = args.trim();
       if (name === "") {
-        const lines = Object.entries(presets).map(([n, tools]) => formatPresetLine(n, tools));
-        ctx.ui.notify(lines.join("\n"), "info");
+        ctx.ui.notify("Missing preset name. Usage: /ptsw-preset-set <name>", "error");
         return;
       }
       if (!isValidPresetName(name)) {

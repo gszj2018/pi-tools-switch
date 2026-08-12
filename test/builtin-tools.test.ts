@@ -8,7 +8,6 @@ import {
   getEffectiveDefaultPreset,
   mergePresets,
   toggleBuiltinTools,
-  toolsSwitchCompletions,
   validateBuiltinTools,
 } from "../extension/builtin-tools.ts";
 
@@ -101,72 +100,6 @@ test("builtinToolCompletions accumulates multiple tool arguments", () => {
 test("builtinToolCompletions rejects invalid completed tokens and stops when exhausted", () => {
   assert.equal(builtinToolCompletions("readx write "), null);
   assert.equal(builtinToolCompletions("read write edit bash find grep ls "), null);
-});
-
-test("toolsSwitchCompletions suggests subcommands with appropriate spacing", () => {
-  const items = toolsSwitchCompletions("");
-  assert.deepEqual(items?.map((i) => i.value), ["enable ", "disable ", "default"]);
-  const partial = toolsSwitchCompletions("dis");
-  assert.deepEqual(partial?.map((i) => i.value), ["disable "]);
-  const invalid = toolsSwitchCompletions("foo");
-  assert.equal(invalid, null);
-});
-
-test("toolsSwitchCompletions selects a subcommand then completes tool names", () => {
-  // Select "enable " -> next pass must fall through to the tool-name stage.
-  const afterSelect = toolsSwitchCompletions("enable ");
-  assert.ok(afterSelect && afterSelect.length === 7, "tool names offered after subcommand");
-  assert.deepEqual(afterSelect[0], { value: "enable read", label: "read" });
-
-  const partial = toolsSwitchCompletions("enable r");
-  assert.deepEqual(partial, [{ value: "enable read", label: "read" }]);
-
-  const disable = toolsSwitchCompletions("disable g");
-  assert.deepEqual(disable, [{ value: "disable grep", label: "grep" }]);
-});
-
-test("toolsSwitchCompletions supports appending multiple tools", () => {
-  // After selecting one tool, further completions accumulate the full list.
-  const afterFirst = toolsSwitchCompletions("enable read ");
-  assert.equal(afterFirst?.length, 6);
-  assert.ok(!afterFirst?.some((i) => i.label === "read"), "already-selected tool excluded");
-  assert.deepEqual(afterFirst?.[0], { value: "enable read write", label: "write" });
-
-  const partial = toolsSwitchCompletions("enable read w");
-  assert.deepEqual(partial, [{ value: "enable read write", label: "write" }]);
-
-  // Complete tool name without a trailing space -> single-tool completion only.
-  const noSpace = toolsSwitchCompletions("enable read");
-  assert.deepEqual(noSpace, [{ value: "enable read", label: "read" }]);
-  // Multi-tool: last complete tool without a trailing space keeps earlier
-  // tools in the accumulated value (still no appends).
-  assert.deepEqual(toolsSwitchCompletions("enable read write"), [
-    { value: "enable read write", label: "write" },
-  ]);
-  // With a trailing space -> append remaining tools.
-  const appendMore = toolsSwitchCompletions("enable read write ");
-  assert.ok(appendMore?.some((i) => i.value === "enable read write bash"));
-  assert.ok(!appendMore?.some((i) => i.label === "read" || i.label === "write"));
-
-  // All tools selected -> no more suggestions.
-  assert.equal(toolsSwitchCompletions("enable read write edit bash find grep ls "), null);
-});
-
-test("toolsSwitchCompletions handles edge prefixes", () => {
-  // Full subcommand typed without space still suggests the spaced value.
-  const typed = toolsSwitchCompletions("enable");
-  assert.deepEqual(typed?.map((i) => i.value), ["enable "]);
-  // Subcommand-like but not valid.
-  assert.equal(toolsSwitchCompletions("enablex"), null);
-  // Unknown subcommand with a second word.
-  assert.equal(toolsSwitchCompletions("foo bar"), null);
-  // Unknown tool name typed after a valid subcommand.
-  assert.equal(toolsSwitchCompletions("enable readx"), null);
-});
-
-test("toolsSwitchCompletions suggests the default subcommand without trailing space", () => {
-  const items = toolsSwitchCompletions("def");
-  assert.deepEqual(items, [{ value: "default", label: "default" }]);
 });
 
 test("getEffectiveDefaultPreset returns the preset only when effective", () => {

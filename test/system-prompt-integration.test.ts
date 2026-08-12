@@ -1,8 +1,7 @@
 /**
  * Integration tests for system prompt injection (extension/system-prompt.ts),
- * driven through a mock pi: the main registration appends both guides and
- * owns the SPL status bar; the subagent registration appends only the tool
- * guide and owns no status bar.
+ * driven through a mock pi: both registration paths append the same complete
+ * guidance, while only the main registration owns the SPL status bar.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -63,13 +62,24 @@ test("register owns the SPL status bar events", () => {
   assert.ok(events.includes("before_agent_start"), "before_agent_start handler expected");
 });
 
-test("registerForSubagent appends only the tool guide", async () => {
-  const mock = createMockPi();
-  registerForSubagent(mock.pi);
-  const result = await mock.emit("before_agent_start", { systemPrompt: "base" });
-  assert.ok(prompt(result).startsWith("base"));
-  assert.ok(prompt(result).includes(TOOL_GUIDE_PROMPT));
-  assert.ok(!prompt(result).includes(GATING_MODE_GUIDANCE_PROMPT));
+test("registerForSubagent appends the same complete guidance as register", async () => {
+  const mainMock = createMockPi();
+  const subagentMock = createMockPi();
+  register(mainMock.pi);
+  registerForSubagent(subagentMock.pi);
+
+  const mainResult = await mainMock.emit("before_agent_start", { systemPrompt: "base" });
+  const subagentResult = await subagentMock.emit("before_agent_start", { systemPrompt: "base" });
+
+  assert.equal(prompt(subagentResult), prompt(mainResult));
+  assert.equal(
+    prompt(subagentResult),
+    `base\n\n${TOOL_GUIDE_PROMPT}\n\n${GATING_MODE_GUIDANCE_PROMPT}`,
+  );
+  assert.match(
+    prompt(subagentResult),
+    /If this is a subagent session, tool gating from this extension is inactive\./,
+  );
 });
 
 test("registerForSubagent owns no status bar events", () => {

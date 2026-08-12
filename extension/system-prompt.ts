@@ -5,8 +5,8 @@
  * the tool-gating guidance prompt at before_agent_start (no config switch),
  * and owns the "pi-tools-switch-spl" status bar showing the system prompt
  * length ([SPL: -] at session start, [SPL: <length>] at agent_start). The
- * subagent registration (registerForSubagent) injects only the tool-guide
- * prompt and owns no status bar. No config dependency.
+ * subagent registration (registerForSubagent) injects the same complete
+ * prompt but owns no status bar. No config dependency.
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -26,11 +26,16 @@ export const GATING_MODE_GUIDANCE_PROMPT = `This coding assistant has several to
 - Restricted tools still appear in the available tools list, but calls that do not comply with the active mode are intercepted by the system, which returns an error explaining the restriction.
 - A gating mode is enabled by a matching prompt, such as a skill invocation or a specific input prefix, and stays active until the user exits it explicitly.
 - The system injects an authoritative message reporting the current gating state.
-- When the work is complete, call the finish tool \`finish_<name>_mode\` to ask the user: they may accept and exit the mode (ending the turn), accept and stay in the mode (ending the turn), or request further improvements (the turn continues and the mode stays active).`;
+- When the work is complete, call the finish tool \`finish_<name>_mode\` to ask the user: they may accept and exit the mode (ending the turn), accept and stay in the mode (ending the turn), or request further improvements (the turn continues and the mode stays active).
+- If this is a subagent session, tool gating from this extension is inactive. Any preceding guidance about enabling or following a gating mode does not apply; follow the subagent's own instructions and the tool restrictions actually provided to it.`;
 
 /** Status bar text for the system prompt length: [SPL: <length>] or [SPL: -]. */
 export function formatSplStatus(length: number | undefined): string {
   return `[SPL: ${length ?? "-"}]`;
+}
+
+function appendSystemPromptGuidance(systemPrompt: string): string {
+  return `${systemPrompt}\n\n${TOOL_GUIDE_PROMPT}\n\n${GATING_MODE_GUIDANCE_PROMPT}`;
 }
 
 export function register(pi: ExtensionAPI): void {
@@ -43,20 +48,18 @@ export function register(pi: ExtensionAPI): void {
   });
 
   pi.on("before_agent_start", async (event) => {
-    return {
-      systemPrompt: `${event.systemPrompt}\n\n${TOOL_GUIDE_PROMPT}\n\n${GATING_MODE_GUIDANCE_PROMPT}`,
-    };
+    return { systemPrompt: appendSystemPromptGuidance(event.systemPrompt) };
   });
 }
 
 /**
- * Subagent variant of register: injects only the tool-guide prompt and no
- * gating-mode guidance, and owns no SPL status bar. Used by index.ts when the
- * extension runs inside a subagent, where built-in tools management and tool
- * gating are skipped entirely.
+ * Subagent variant of register: injects the same complete prompt as the main
+ * registration but owns no SPL status bar. Used by index.ts when the extension
+ * runs inside a subagent, where built-in tools management and tool gating are
+ * skipped entirely.
  */
 export function registerForSubagent(pi: ExtensionAPI): void {
   pi.on("before_agent_start", async (event) => {
-    return { systemPrompt: `${event.systemPrompt}\n\n${TOOL_GUIDE_PROMPT}` };
+    return { systemPrompt: appendSystemPromptGuidance(event.systemPrompt) };
   });
 }

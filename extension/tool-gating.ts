@@ -26,6 +26,9 @@ export const EXIT_MODE_PROMPT_GUIDELINES = [
   "Before calling exit_mode, output any full deliverable separately. Then call exit_mode with the current mode and a concise one-sentence summary; the user may accept and exit, accept and stay, or request further improvements.",
 ];
 
+export const SUBAGENT_GATING_INACTIVE_PROMPT =
+  "This is a subagent session, so tool gating from the pi-tools-switch extension is inactive. Guidance about enabling or following a gating mode does not apply; follow the subagent's own instructions and the tool restrictions actually provided to it.";
+
 /** Built-in gating modes, keyed by mode name. User modes with the same name override them. */
 export const BUILTIN_GATING_MODES: Record<string, GatingModeConfig> = {
   plan: {
@@ -404,5 +407,17 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
         "info",
       );
     },
+  });
+}
+
+/**
+ * Subagent registration: explain that this extension's gating is inactive,
+ * without registering tools, commands, event gates, or status UI.
+ */
+export function registerForSubagent(pi: ExtensionAPI): void {
+  pi.on("before_agent_start", async (event) => {
+    return {
+      systemPrompt: `${event.systemPrompt}\n\n${SUBAGENT_GATING_INACTIVE_PROMPT}`,
+    };
   });
 }

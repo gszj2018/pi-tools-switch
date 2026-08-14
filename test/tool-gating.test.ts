@@ -24,7 +24,7 @@ const BUILTIN_PLAN = BUILTIN_GATING_MODES["plan"];
 test("mergeGatingModes includes the built-in plan mode under the name 'plan'", () => {
   const merged = mergeGatingModes({});
   assert.deepEqual(merged["plan"], BUILTIN_PLAN);
-  assert.deepEqual(merged["plan"].trigger, ["/skill:plan-mode"]);
+  assert.deepEqual(merged["plan"].trigger, ["/plan-mode"]);
 });
 
 test("mergeGatingModes honors user overrides and additions", () => {
@@ -40,8 +40,8 @@ test("mergeGatingModes honors user overrides and additions", () => {
 
 test("matchTrigger matches the first mode whose trigger is a prefix", () => {
   const modes = mergeGatingModes({});
-  assert.equal(matchTrigger("/skill:plan-mode do a plan", modes), "plan");
-  assert.equal(matchTrigger("/skill:plan-mode", modes), "plan");
+  assert.equal(matchTrigger("/plan-mode do a plan", modes), "plan");
+  assert.equal(matchTrigger("/plan-mode", modes), "plan");
 });
 
 test("matchTrigger returns undefined when nothing matches", () => {

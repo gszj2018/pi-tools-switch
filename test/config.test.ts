@@ -32,7 +32,7 @@ function assertDefaultConfig(config: Config): void {
   assert.deepEqual(config.subagentEnvVars, []);
   assert.deepEqual(config.gatingModes, {});
   assert.equal(config.defaultPreset, undefined);
-  assert.deepEqual(config.gatingExitTrigger, ["/skill:normal-mode"]);
+  assert.deepEqual(config.gatingExitTrigger, ["/normal-mode"]);
 }
 
 /** Remove the config file (if present) and the empty temp dir, avoiding recursive removal. */
@@ -49,7 +49,7 @@ test("normalizeConfig({}) returns defaults with no errors", () => {
   assert.deepEqual(r.config.subagentEnvVars, []);
   assert.deepEqual(r.config.gatingModes, {});
   assert.equal(r.config.defaultPreset, undefined);
-  assert.deepEqual(r.config.gatingExitTrigger, ["/skill:normal-mode"]);
+  assert.deepEqual(r.config.gatingExitTrigger, ["/normal-mode"]);
   assert.deepEqual(r.errors, []);
 });
 
@@ -147,7 +147,7 @@ test("normalizeConfig validates gatingModes", () => {
     'gatingModes["empty-triggers"]: missing or empty trigger',
     'gatingModes["blank-trigger"].trigger: empty trigger prefix is not allowed',
     'gatingModes["blank-trigger"]: missing or empty trigger',
-    'gatingModes["legacy-trigger"].trigger: expected an array of non-empty trigger strings (e.g. ["/skill:plan-mode"])',
+    'gatingModes["legacy-trigger"].trigger: expected an array of non-empty trigger strings (e.g. ["/plan-mode"])',
     'gatingModes["legacy-trigger"]: missing or empty trigger',
     'gatingModes["number"]: expected an object, got number',
     'gatingModes["ok"].allowTools: expected an array of strings, got string',
@@ -159,9 +159,9 @@ test("normalizeConfig validates gatingModes", () => {
   ]);
 });
 
-test("normalizeConfig defaults gatingExitTrigger to the normal-mode skill prefix", () => {
+test("normalizeConfig defaults gatingExitTrigger to the normal-mode prompt-template prefix", () => {
   const r = normalizeConfig({});
-  assert.deepEqual(r.config.gatingExitTrigger, ["/skill:normal-mode"]);
+  assert.deepEqual(r.config.gatingExitTrigger, ["/normal-mode"]);
   assert.deepEqual(r.errors, []);
 });
 
@@ -171,7 +171,7 @@ test("normalizeConfig validates gatingExitTrigger", () => {
   assert.deepEqual(ok.errors, []);
 
   const empty = normalizeConfig({ gatingExitTrigger: [] });
-  assert.deepEqual(empty.config.gatingExitTrigger, ["/skill:normal-mode"]);
+  assert.deepEqual(empty.config.gatingExitTrigger, ["/normal-mode"]);
   assertErrors(empty, ["gatingExitTrigger: must contain at least one non-empty trigger prefix"]);
 
   const blank = normalizeConfig({ gatingExitTrigger: ["", "  ", "OK:"] });
@@ -182,9 +182,9 @@ test("normalizeConfig validates gatingExitTrigger", () => {
   ]);
 
   const nonArray = normalizeConfig({ gatingExitTrigger: "EXIT:" });
-  assert.deepEqual(nonArray.config.gatingExitTrigger, ["/skill:normal-mode"]);
+  assert.deepEqual(nonArray.config.gatingExitTrigger, ["/normal-mode"]);
   assertErrors(nonArray, [
-    'gatingExitTrigger: expected an array of non-empty trigger strings (e.g. ["/skill:plan-mode"])',
+    'gatingExitTrigger: expected an array of non-empty trigger strings (e.g. ["/plan-mode"])',
   ]);
 
   const mixed = normalizeConfig({ gatingExitTrigger: ["EXIT:", 7] });

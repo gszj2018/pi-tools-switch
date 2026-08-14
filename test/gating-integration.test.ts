@@ -192,7 +192,7 @@ test("entering a mode injects the mode-state message without changing active too
   const { emit, activeTools } = setup();
   await emit("session_start");
   const before = activeTools();
-  await emit("input", { text: "/skill:plan-mode draw a plan" });
+  await emit("input", { text: "/plan-mode draw a plan" });
   const msg = injected(await emit("before_agent_start"));
   assert.ok(msg, "expected a mode-state message when entering the mode");
   assert.equal(msg!.customType, "pi-tools-switch-mode");
@@ -204,17 +204,17 @@ test("entering a mode injects the mode-state message without changing active too
 test("a repeated trigger does not re-inject the same mode message", async () => {
   const { emit } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode first" });
+  await emit("input", { text: "/plan-mode first" });
   assert.ok(injected(await emit("before_agent_start")));
   await emit("agent_settled");
-  await emit("input", { text: "/skill:plan-mode again" });
+  await emit("input", { text: "/plan-mode again" });
   assert.equal(await emit("before_agent_start"), undefined, "no message when the mode is unchanged");
 });
 
 test("the mode persists across turns: a plain turn stays gated without re-injection", async () => {
   const { emit } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   await emit("agent_settled");
   await emit("input", { text: "plain question" });
@@ -231,7 +231,7 @@ test("switching modes injects the new state without changing active tools", asyn
   const { emit, activeTools } = setup(EXPLORE_CONFIG);
   await emit("session_start");
   const before = activeTools();
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   await emit("agent_settled");
   await emit("input", { text: "/skill:explore" });
@@ -244,7 +244,7 @@ test("switching modes injects the new state without changing active tools", asyn
 test("exit_mode stays active after agent_settled while the mode persists", async () => {
   const { emit, activeTools } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   await emit("agent_settled");
   assert.deepEqual(activeTools(), [EXIT_MODE_TOOL_NAME]);
@@ -253,10 +253,10 @@ test("exit_mode stays active after agent_settled while the mode persists", async
 test("the exit trigger exits the mode, keeps exit_mode active, and ungates tools", async () => {
   const { emit, activeTools } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   await emit("agent_settled");
-  await emit("input", { text: "/skill:normal-mode" });
+  await emit("input", { text: "/normal-mode" });
   assert.deepEqual(activeTools(), [EXIT_MODE_TOOL_NAME]);
   const msg = injected(await emit("before_agent_start"));
   assert.ok(msg, "expected a no-mode message after exiting");
@@ -268,7 +268,7 @@ test("the exit trigger exits the mode, keeps exit_mode active, and ungates tools
 test("the exit trigger with no active mode is harmless", async () => {
   const { emit, activeTools } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:normal-mode" });
+  await emit("input", { text: "/normal-mode" });
   assert.deepEqual(activeTools(), [EXIT_MODE_TOOL_NAME]);
   const msg = injected(await emit("before_agent_start"));
   assert.ok(msg, "the first turn still reports the no-mode state");
@@ -283,7 +283,7 @@ test("steering input during a run cannot change the mode and notifies an error",
   const ctx = createMockCtx({ ui: { notify: (text: string) => notified.push(text) } });
   await emit("session_start");
   // Turn 1: enter plan mode.
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   assert.ok(injected(await emit("before_agent_start")));
   // A mode trigger arrives mid-run (guard raised): the input is consumed so it
   // never reaches the agent, the mode stays unchanged, and an error notice is
@@ -293,7 +293,7 @@ test("steering input during a run cannot change the mode and notifies an error",
   assert.equal(notified.length, 1, "a mode trigger during the guard should notify an error");
   assert.match(notified[0], /Cannot switch the gating mode/);
   // An exit trigger during the run is rejected the same way.
-  const blockedExitInput = await emit("input", { text: "/skill:normal-mode" }, ctx);
+  const blockedExitInput = await emit("input", { text: "/normal-mode" }, ctx);
   assert.deepEqual(blockedExitInput, { action: "handled" });
   assert.equal(notified.length, 2, "an exit trigger during the guard should also notify");
   assert.deepEqual(activeTools(), [EXIT_MODE_TOOL_NAME], "the mode switch attempt changes no tools");
@@ -313,7 +313,7 @@ test("ordinary steering input during a run passes through without notify", async
   const notified: string[] = [];
   const ctx = createMockCtx({ ui: { notify: (text: string) => notified.push(text) } });
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   const result = await emit("input", { text: "please continue" }, ctx);
   assert.equal(result, undefined, "ordinary input during the guard is not blocked");
@@ -325,7 +325,7 @@ test("ordinary steering input during a run passes through without notify", async
 test("tool calls are gated while the mode is active", async () => {
   const { emit } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   const gated = blocked(await emit("tool_call", { toolName: "bash", input: { command: "x" } }));
   assert.ok(gated, "bash should be blocked in plan mode");
@@ -342,7 +342,7 @@ test("tool calls are gated while the mode is active", async () => {
 test("write is allowed inside allowWriteDir and blocked outside", async () => {
   const { emit } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   const inDir = await emit("tool_call", {
     toolName: "write",
@@ -389,7 +389,7 @@ test("exit_mode fails without an active mode and has no UI side effects", async 
 test("exit_mode rejects a mismatched mode without changing the active mode", async () => {
   const { emit, tools, activeTools } = setup(EXPLORE_CONFIG);
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await assert.rejects(
     tools[EXIT_MODE_TOOL_NAME](
       "id",
@@ -408,7 +408,7 @@ test("exit_mode rejects a mismatched mode without changing the active mode", asy
 test("exit_mode non-interactive Accept-and-exit terminates and closes the mode", async () => {
   const { emit, tools, activeTools } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   const result = (await tools[EXIT_MODE_TOOL_NAME](
     "id",
@@ -428,7 +428,7 @@ test("exit_mode non-interactive Accept-and-exit terminates and closes the mode",
 test("exit_mode interactive Accept-and-exit terminates and closes the mode", async () => {
   const { emit, tools, activeTools } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   const result = (await tools[EXIT_MODE_TOOL_NAME](
     "id",
@@ -445,7 +445,7 @@ test("exit_mode interactive Accept-and-exit terminates and closes the mode", asy
 test("exit_mode Accept-and-stay terminates but keeps the mode active", async () => {
   const { emit, tools, activeTools } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   const result = (await tools[EXIT_MODE_TOOL_NAME](
     "id",
@@ -465,7 +465,7 @@ test("exit_mode Accept-and-stay terminates but keeps the mode active", async () 
 test("exit_mode Refine keeps the turn running with a refinement hint", async () => {
   const { emit, tools, activeTools } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
   const result = (await tools[EXIT_MODE_TOOL_NAME](
     "id",
@@ -486,7 +486,7 @@ test("exit_mode Refine keeps the turn running with a refinement hint", async () 
 test("exit_mode Refine omits the hint when the refinement input is blank", async () => {
   const { emit, tools } = setup();
   await emit("session_start");
-  await emit("input", { text: "/skill:plan-mode" });
+  await emit("input", { text: "/plan-mode" });
   const result = (await tools[EXIT_MODE_TOOL_NAME](
     "id",
     { mode: "plan", summary: "done" },

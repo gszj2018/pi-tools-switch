@@ -337,7 +337,7 @@ test("mode list and show preserve summaries, details, and validation", async () 
   assert.equal(
     list.message,
     [
-      "plan trigger: /skill:plan-mode",
+      "plan trigger: /plan-mode",
       "review trigger: REVIEW:",
       "exit trigger: NORMAL:",
     ].join("\n"),

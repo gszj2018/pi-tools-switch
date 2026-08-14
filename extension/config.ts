@@ -33,7 +33,7 @@ export interface Config {
   subagentEnvVars: string[];
   /** User-defined gating modes. Names matching built-in modes override them. */
   gatingModes: Record<string, GatingModeConfig>;
-  /** Input prefixes that exit the active gating mode; defaults to the normal-mode skill prefix. */
+  /** Input prefixes that exit the active gating mode; defaults to the normal-mode prompt-template prefix. */
   gatingExitTrigger: string[];
 }
 
@@ -55,8 +55,8 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-/** Default exit trigger: the normal-mode skill command prefix. */
-export const DEFAULT_GATING_EXIT_TRIGGER: readonly string[] = ["/skill:normal-mode"];
+/** Default exit trigger: the normal-mode prompt-template command prefix. */
+export const DEFAULT_GATING_EXIT_TRIGGER: readonly string[] = ["/normal-mode"];
 
 export const DEFAULT_CONFIG: Config = deepFreeze({
   presets: {},
@@ -126,7 +126,7 @@ function normalizeTriggerList(value: unknown, errors: string[], field: string): 
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
     errors.push(
-      `${field}: expected an array of non-empty trigger strings (e.g. [\"/skill:plan-mode\"])`,
+      `${field}: expected an array of non-empty trigger strings (e.g. [\"/plan-mode\"])`,
     );
     return [];
   }
@@ -164,7 +164,7 @@ function normalizeGatingMode(name: string, value: unknown, errors: string[]): Ga
 }
 
 /**
- * Normalize gatingExitTrigger: absent -> the default normal-mode skill prefix;
+ * Normalize gatingExitTrigger: absent -> the default normal-mode prompt-template prefix;
  * present -> a non-empty trigger list, falling back to the default when the
  * value is invalid or yields no usable prefix.
  */

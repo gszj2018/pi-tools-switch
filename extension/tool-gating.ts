@@ -32,7 +32,7 @@ export const SUBAGENT_GATING_INACTIVE_PROMPT =
 /** Built-in gating modes, keyed by mode name. User modes with the same name override them. */
 export const BUILTIN_GATING_MODES: Record<string, GatingModeConfig> = {
   plan: {
-    trigger: ["/skill:plan-mode"],
+    trigger: ["/plan-mode"],
     allowTools: [],
     allowWriteDir: [".agents/plans"],
   },

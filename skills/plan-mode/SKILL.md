@@ -20,6 +20,9 @@ You are now in **plan mode** - a read-only exploration and planning mode.
 
 ## Finishing the plan
 
-When the plan is complete, call the `finish_plan_mode` tool with a `summary` describing the plan.
+When the plan is complete:
 
-> The system reports your current mode through an injected message. If that message says you are not in any gating mode, you have already exited plan mode - proceed with normal execution.
+1. Output the complete plan separately before calling the completion tool.
+2. Call `exit_mode` with `mode: "plan"` and a `summary` containing only one concise sentence that describes the completed planning work. Do not put the complete plan in `summary`.
+
+> The system reports your current mode through an injected message. Treat that message as authoritative. If it says you are not in any gating mode, you have already exited plan mode; proceed with normal execution.

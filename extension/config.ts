@@ -55,14 +55,12 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-/** Default exit trigger: the normal-mode prompt-template command prefix. */
-export const DEFAULT_GATING_EXIT_TRIGGER: readonly string[] = ["/normal-mode"];
-
+/** Default config: all lists empty; built-ins are merged with user config at load time. */
 export const DEFAULT_CONFIG: Config = deepFreeze({
   presets: {},
   subagentEnvVars: [],
   gatingModes: {},
-  gatingExitTrigger: [...DEFAULT_GATING_EXIT_TRIGGER],
+  gatingExitTrigger: [],
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -164,21 +162,12 @@ function normalizeGatingMode(name: string, value: unknown, errors: string[]): Ga
 }
 
 /**
- * Normalize gatingExitTrigger: absent -> the default normal-mode prompt-template prefix;
- * present -> a non-empty trigger list, falling back to the default when the
- * value is invalid or yields no usable prefix.
+ * Normalize gatingExitTrigger: absent or empty -> an empty list (merged with
+ * the built-in exit triggers by tool-gating.ts). Invalid entries are reported
+ * and dropped.
  */
 function normalizeExitTrigger(value: unknown, errors: string[]): string[] {
-  const field = "gatingExitTrigger";
-  if (value === undefined) return [...DEFAULT_GATING_EXIT_TRIGGER];
-  const triggers = normalizeTriggerList(value, errors, field);
-  if (triggers.length === 0) {
-    if (Array.isArray(value)) {
-      errors.push(`${field}: must contain at least one non-empty trigger prefix`);
-    }
-    return [...DEFAULT_GATING_EXIT_TRIGGER];
-  }
-  return triggers;
+  return normalizeTriggerList(value, errors, "gatingExitTrigger");
 }
 
 function normalizeGatingModes(value: unknown, errors: string[]): Record<string, GatingModeConfig> {

@@ -278,6 +278,27 @@ test("the exit trigger with no active mode is harmless", async () => {
   assert.match(msg!.content, /not currently in any gating mode/);
 });
 
+test("a non-empty configured exit trigger fully overrides the built-in prefix", async () => {
+  const { emit, activeTools } = setup({ ...DEFAULT_CONFIG, gatingExitTrigger: ["NORMAL:"] });
+  await emit("session_start");
+  await emit("input", { text: "/plan-mode" });
+  await emit("before_agent_start");
+  await emit("agent_settled");
+  // The built-in prefix no longer exits the mode: bash stays gated.
+  await emit("input", { text: "/normal-mode" });
+  const gated = blocked(await emit("tool_call", { toolName: "bash", input: { command: "x" } }));
+  assert.ok(gated, "bash should remain gated after the built-in prefix");
+  assert.match(gated!.reason ?? "", /In plan mode/);
+  // The configured prefix exits the mode and ungates tools.
+  await emit("input", { text: "NORMAL:" });
+  assert.deepEqual(activeTools(), [EXIT_MODE_TOOL_NAME]);
+  const msg = injected(await emit("before_agent_start"));
+  assert.ok(msg, "expected a no-mode message after the configured trigger");
+  assert.match(msg!.content, /not currently in any gating mode/);
+  const allowed = await emit("tool_call", { toolName: "bash", input: { command: "x" } });
+  assert.equal(allowed, undefined, "tools are ungated after the configured exit");
+});
+
 // --- B. Steering guard ------------------------------------------------------
 
 test("steering input during a run cannot change the mode and notifies an error", async () => {

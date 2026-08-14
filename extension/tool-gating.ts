@@ -45,6 +45,19 @@ export function mergeGatingModes(
   return { ...BUILTIN_GATING_MODES, ...userModes };
 }
 
+/** Built-in gating exit-trigger prefixes, used when the config provides none. */
+export const BUILTIN_GATING_EXIT_TRIGGERS: readonly string[] = ["/normal-mode"];
+
+/**
+ * Merge config exit triggers with the built-in ones: a non-empty config list
+ * fully overrides the built-ins (no built-in prefix is kept); an empty config
+ * list falls back to the built-in prefixes. Always returns a fresh array so
+ * the built-in constant is never aliased or mutated.
+ */
+export function mergeGatingExitTriggers(userTriggers: readonly string[]): string[] {
+  return userTriggers.length > 0 ? [...userTriggers] : [...BUILTIN_GATING_EXIT_TRIGGERS];
+}
+
 /** Return true when any non-empty trigger is a prefix of `text`. */
 export function matchAnyTrigger(text: string, triggers: readonly string[]): boolean {
   return triggers.some((trigger) => trigger.length > 0 && text.startsWith(trigger));
@@ -163,8 +176,10 @@ export function decideToolCall(
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   // Merged gating modes cached once at load time (rebuilt on extension reload).
   const modes = mergeGatingModes(getConfig().gatingModes);
-  // Exit-trigger prefixes cached once at load time (rebuilt on extension reload).
-  const exitTriggers = getConfig().gatingExitTrigger;
+  // Exit-trigger prefixes cached once at load time (rebuilt on extension reload):
+  // an empty config list falls back to the built-in prefixes, a non-empty one
+  // fully overrides them.
+  const exitTriggers = mergeGatingExitTriggers(getConfig().gatingExitTrigger);
 
   let activeModeName: string | undefined;
   let activeMode: GatingModeConfig | undefined;

@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  BUILTIN_GATING_EXIT_TRIGGERS,
   BUILTIN_GATING_MODES,
   EXIT_MODE_TOOL_NAME,
   buildBlockReason,
@@ -12,6 +13,7 @@ import {
   formatModeStatus,
   matchAnyTrigger,
   matchTrigger,
+  mergeGatingExitTriggers,
   mergeGatingModes,
   shouldInjectModeMessage,
 } from "../extension/tool-gating.ts";
@@ -25,6 +27,21 @@ test("mergeGatingModes includes the built-in plan mode under the name 'plan'", (
   const merged = mergeGatingModes({});
   assert.deepEqual(merged["plan"], BUILTIN_PLAN);
   assert.deepEqual(merged["plan"].trigger, ["/plan-mode"]);
+});
+
+test("mergeGatingExitTriggers falls back to the built-in prefix when the config list is empty", () => {
+  assert.deepEqual(mergeGatingExitTriggers([]), ["/normal-mode"]);
+  assert.deepEqual(BUILTIN_GATING_EXIT_TRIGGERS, ["/normal-mode"]);
+  // The result is a fresh array: mutating it must not alias the constant.
+  const merged = mergeGatingExitTriggers([]);
+  merged.push("EXTRA:");
+  assert.deepEqual(BUILTIN_GATING_EXIT_TRIGGERS, ["/normal-mode"]);
+});
+
+test("mergeGatingExitTriggers fully overrides the built-in prefix with a non-empty list", () => {
+  assert.deepEqual(mergeGatingExitTriggers(["NORMAL:", "EXIT:"]), ["NORMAL:", "EXIT:"]);
+  // No built-in prefix is kept when the config provides its own.
+  assert.ok(!mergeGatingExitTriggers(["NORMAL:"]).includes("/normal-mode"));
 });
 
 test("mergeGatingModes honors user overrides and additions", () => {

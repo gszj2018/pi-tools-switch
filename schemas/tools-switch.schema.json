@@ -81,7 +81,7 @@
         "type": "string",
         "minLength": 1
       },
-      "description": "Input prefixes that exit the active gating mode. Defaults to [\"/skill:normal-mode\"] when omitted. Empty prefixes are rejected."
+      "description": "Input prefixes that exit the active gating mode. Defaults to [\"/normal-mode\"] when omitted. Empty prefixes are rejected."
     }
   },
   "additionalProperties": true

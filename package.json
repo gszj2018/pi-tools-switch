@@ -19,8 +19,8 @@
     "extensions": [
       "./extension/index.ts"
     ],
-    "skills": [
-      "./skills"
+    "prompts": [
+      "./prompts"
     ]
   },
   "peerDependencies": {

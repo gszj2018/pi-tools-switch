@@ -24,3 +24,6 @@ When the plan is complete:
 2. Call `exit_mode` with `mode: "plan"` and a `summary` containing only one concise sentence that describes the completed planning work. Do not put the complete plan in `summary`.
 
 > The system reports your current mode through an injected message. Treat that message as authoritative. If it says you are not in any gating mode, you have already exited plan mode; proceed with normal execution.
+
+---
+$@

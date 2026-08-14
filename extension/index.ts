@@ -3,19 +3,21 @@
  *
  * Loads the config at startup (falling back to defaults on failure), and
  * injects the getConfig callback into each feature module. Runs the subagent
- * detection once at the factory layer: inside a subagent only the subagent
- * system-prompt registration is used, while built-in tools management and
- * gating are skipped. The subagent receives the complete shared prompt but
- * no SPL status bar. Feature modules own their state, status bars, and
- * notifications independently; all text feedback goes through ctx.ui.notify.
+ * detection once at the factory layer: inside a subagent only the tool-gating
+ * module's inactive-gating prompt is registered, while built-in tool
+ * management and actual gating are skipped. Feature modules own their state,
+ * status bars, and notifications independently; all text feedback goes
+ * through ctx.ui.notify.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { CONFIG_FILE_NAME, DEFAULT_CONFIG, loadConfigFrom, type Config } from "./config.ts";
 import { isSubagentEnv } from "./subagent-support.ts";
 import { register as registerBuiltinTools } from "./builtin-tools.ts";
-import { register as registerToolGating } from "./tool-gating.ts";
-import { register as registerSystemPrompt, registerForSubagent } from "./system-prompt.ts";
+import {
+  register as registerToolGating,
+  registerForSubagent,
+} from "./tool-gating.ts";
 
 export default async function (pi: ExtensionAPI): Promise<void> {
   let config: Config = DEFAULT_CONFIG;
@@ -38,10 +40,9 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 
   const getConfig = (): Config => config;
 
-  // Subagent detection runs once at the factory layer. Inside a subagent the
-  // built-in tools management and gating modules are skipped entirely. The
-  // system prompt still receives the complete shared guidance, but no SPL
-  // status bar.
+  // Subagent detection runs once at the factory layer. Inside a subagent,
+  // built-in tool management and actual gating are skipped; only the fixed
+  // inactive-gating system-prompt notice is registered.
   if (isSubagentEnv(process.env, config.subagentEnvVars)) {
     registerForSubagent(pi);
     return;
@@ -49,5 +50,4 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 
   registerBuiltinTools(pi, getConfig);
   registerToolGating(pi, getConfig);
-  registerSystemPrompt(pi);
 }

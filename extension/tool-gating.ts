@@ -15,6 +15,17 @@ import type { Config, GatingModeConfig } from "./config.ts";
 
 const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
 
+export const EXIT_MODE_TOOL_NAME = "exit_mode";
+
+export const EXIT_MODE_PROMPT_SNIPPET =
+  "Submit a concise one-sentence summary for the active gating mode and ask whether to exit, stay, or refine";
+
+export const EXIT_MODE_PROMPT_GUIDELINES = [
+  "exit_mode is the completion tool for tool-gating modes. Restricted tools may remain visible, but calls that violate the active mode are intercepted with an explanatory error.",
+  "A gating mode is activated by a matching prompt and remains active until explicitly exited; treat the injected gating-state message as authoritative, and pass its exact mode name to exit_mode.",
+  "Before calling exit_mode, output any full deliverable separately. Then call exit_mode with the current mode and a concise one-sentence summary; the user may accept and exit, accept and stay, or request further improvements.",
+];
+
 /** Built-in gating modes, keyed by mode name. User modes with the same name override them. */
 export const BUILTIN_GATING_MODES: Record<string, GatingModeConfig> = {
   plan: {
@@ -199,6 +210,96 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     refreshStatus(ctx);
   };
 
+  const ensureExitModeActive = (): void => {
+    const activeTools = pi.getActiveTools();
+    if (!activeTools.includes(EXIT_MODE_TOOL_NAME)) {
+      pi.setActiveTools([...activeTools, EXIT_MODE_TOOL_NAME]);
+    }
+  };
+
+  const registerExitModeTool = (): void => {
+    pi.registerTool({
+      name: EXIT_MODE_TOOL_NAME,
+      label: "Complete Current Gating Mode",
+      description:
+        "Submit a concise one-sentence completion summary for the active tool gating mode and ask the user whether to exit, stay, or refine. Output any full deliverable separately before calling this tool.",
+      promptSnippet: EXIT_MODE_PROMPT_SNIPPET,
+      promptGuidelines: EXIT_MODE_PROMPT_GUIDELINES,
+      executionMode: "sequential",
+      parameters: Type.Object({
+        mode: Type.String({
+          description: "Exact active mode name from the injected gating-state message.",
+        }),
+        summary: Type.String({
+          description:
+            "Concise one-sentence summary of the completed work. Output any full deliverable separately before calling exit_mode; do not include it in summary.",
+        }),
+      }),
+      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+        const modeName = activeModeName;
+        if (!modeName || !activeMode) {
+          throw new Error("exit_mode failed: no gating mode is currently active.");
+        }
+        if (params.mode !== modeName) {
+          throw new Error(
+            `exit_mode failed: requested mode "${params.mode}" does not match the active mode "${modeName}".`,
+          );
+        }
+
+        const acceptAndExit = (): {
+          content: { type: "text"; text: string }[];
+          details: Record<string, unknown>;
+          terminate: true;
+        } => {
+          ctx.ui.notify(params.summary, "info");
+          setMode(undefined, ctx);
+          return {
+            content: [
+              { type: "text", text: `The user has accepted. Exiting ${modeName} mode now.` },
+            ],
+            details: { summary: params.summary },
+            terminate: true,
+          };
+        };
+        const acceptAndStay = (): {
+          content: { type: "text"; text: string }[];
+          details: Record<string, unknown>;
+          terminate: true;
+        } => {
+          ctx.ui.notify(params.summary, "info");
+          return {
+            content: [
+              { type: "text", text: `The user has accepted. You are still in ${modeName} mode.` },
+            ],
+            details: { summary: params.summary },
+            terminate: true,
+          };
+        };
+        if (!ctx.hasUI) return acceptAndExit();
+        const choice = await ctx.ui.select(
+          `${modeName} mode: accept and exit, accept and stay, or refine?\n${params.summary}`,
+          ["Accept and exit mode", "Accept and stay in mode", "Refine"],
+        );
+        if (choice === "Accept and stay in mode") return acceptAndStay();
+        if (choice === "Refine") {
+          const refinement = (await ctx.ui.input("Refinement:", ""))?.trim() ?? "";
+          const hint = refinement ? ` Refinement hint: ${refinement}` : "";
+          return {
+            content: [
+              {
+                type: "text",
+                text: `The user requested further improvements. You are still in ${modeName} mode.${hint}`,
+              },
+            ],
+            details: { summary: params.summary },
+          };
+        }
+        return acceptAndExit();
+      },
+    });
+    ensureExitModeActive();
+  };
+
   const registerFinishTool = (modeName: string): void => {
     const toolName = `finish_${modeName}_mode`;
     pi.registerTool({
@@ -263,7 +364,9 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     });
   };
 
-  // Register finish tools at extension load time (factory), once per instance.
+  // Register the stable completion tool at extension load time and keep the
+  // legacy per-mode tools until the dynamic-tool removal step is applied.
+  registerExitModeTool();
   for (const name of Object.keys(modes)) {
     registerFinishTool(name);
   }
@@ -274,6 +377,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     modeGuardActive = false;
     lastReportedModeName = null;
     setMode(undefined, ctx);
+    ensureExitModeActive();
   });
 
   pi.on("input", async (event, ctx) => {

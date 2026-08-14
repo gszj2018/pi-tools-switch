@@ -280,7 +280,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
         return acceptAndExit();
       },
     });
-    ensureExitModeActive();
   };
 
   // Register one stable completion tool for every gating mode. Mode changes

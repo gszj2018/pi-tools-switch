@@ -150,8 +150,11 @@ const EXPLORE_CONFIG: Config = {
 
 // --- A. Stable exit_mode metadata and mode-state injection ---------------
 
-test("registers one stable exit_mode with fixed prompt metadata and schema", () => {
-  const { activeTools, toolDefinitions } = setup(EXPLORE_CONFIG);
+test("registers one stable exit_mode with fixed prompt metadata and schema", async () => {
+  const { emit, activeTools, toolDefinitions } = setup(EXPLORE_CONFIG);
+  // exit_mode becomes active at session_start (the runtime is not ready
+  // during factory load), so drive the real lifecycle before asserting.
+  await emit("session_start");
   assert.deepEqual(Object.keys(toolDefinitions), [EXIT_MODE_TOOL_NAME]);
   assert.deepEqual(activeTools(), [EXIT_MODE_TOOL_NAME]);
 

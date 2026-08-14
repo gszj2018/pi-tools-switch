@@ -123,11 +123,20 @@ function createMockPi(initialActiveTools: string[] = ["read", "external_tool"]) 
   };
 }
 
-function setup(config: Config = TEST_CONFIG) {
+async function setup(config: Config = TEST_CONFIG) {
   const mock = createMockPi();
+  // Factory-phase registration: commands and the exit_mode tool are
+  // registered, but exit_mode is NOT yet active and no preset is applied —
+  // action methods like setActiveTools only run once the session runtime is
+  // initialized.
   registerBuiltinTools(mock.pi, () => config);
   registerToolGating(mock.pi, () => config);
   const context = createMockCtx();
+
+  // Real activation flow: session_start activates exit_mode and applies the
+  // configured default preset, exactly as a real session does before any
+  // command can run. Commands are then tested against this post-start state.
+  await mock.emit("session_start", context.ctx);
 
   const invoke = async (name: string, args = ""): Promise<void> => {
     const command = mock.commands.get(name);
@@ -146,16 +155,16 @@ function lastNotification(notifications: Notification[]): Notification {
   return notification;
 }
 
-test("registers exactly the eight expected commands", () => {
-  const mock = setup();
+test("registers exactly the eight expected commands", async () => {
+  const mock = await setup();
   assert.deepEqual([...mock.commands.keys()], TARGET_COMMANDS);
   for (const command of mock.commands.values()) {
     assert.ok(command.description && command.description.length > 0);
   }
 });
 
-test("binds completions only to commands that accept completable arguments", () => {
-  const mock = setup();
+test("binds completions only to commands that accept completable arguments", async () => {
+  const mock = await setup();
   const enable = mock.commands.get("ptsw-builtin-enable")!;
   const disable = mock.commands.get("ptsw-builtin-disable")!;
   assert.equal(enable.getArgumentCompletions, disable.getArgumentCompletions);
@@ -188,7 +197,7 @@ test("binds completions only to commands that accept completable arguments", () 
 });
 
 test("argument-free commands reject extra arguments through the shared Pi utility", async () => {
-  const mock = setup();
+  const mock = await setup();
   for (const name of [
     "ptsw-builtin-status",
     "ptsw-builtin-reset",
@@ -207,7 +216,7 @@ test("argument-free commands reject extra arguments through the shared Pi utilit
 });
 
 test("ptsw-builtin-status reports built-in and external tool state", async () => {
-  const mock = setup();
+  const mock = await setup();
   await mock.invoke("ptsw-builtin-status");
   const notification = lastNotification(mock.notifications);
   assert.equal(notification.level, "info");
@@ -217,19 +226,40 @@ test("ptsw-builtin-status reports built-in and external tool state", async () =>
 });
 
 test("builtin enable and disable support multiple tools and preserve external tools", async () => {
-  const mock = setup();
-  await mock.invoke("ptsw-builtin-enable", "write grep");
-  assert.deepEqual(mock.activeTools(), ["read", "external_tool", "exit_mode", "write", "grep"]);
-  assert.match(lastNotification(mock.notifications).message, /Enabled write, grep/);
+  // After session_start the explore preset and exit_mode are active, so the
+  // test exercises enable/disable on top of that real baseline: enabling
+  // write/edit/bash adds them, then disabling the explore preset tools
+  // removes them while preserving external tools (external_tool, exit_mode)
+  // and the previously enabled write/edit/bash.
+  const mock = await setup();
+  await mock.invoke("ptsw-builtin-enable", "write edit bash");
+  assert.deepEqual(mock.activeTools(), [
+    "external_tool",
+    "read",
+    "find",
+    "grep",
+    "ls",
+    "exit_mode",
+    "write",
+    "edit",
+    "bash",
+  ]);
+  assert.match(lastNotification(mock.notifications).message, /Enabled write, edit, bash/);
 
-  await mock.invoke("ptsw-builtin-disable", "read grep");
-  assert.deepEqual(mock.activeTools(), ["external_tool", "exit_mode", "write"]);
-  assert.match(lastNotification(mock.notifications).message, /Disabled read, grep/);
+  await mock.invoke("ptsw-builtin-disable", "read find grep ls");
+  assert.deepEqual(mock.activeTools(), [
+    "external_tool",
+    "exit_mode",
+    "write",
+    "edit",
+    "bash",
+  ]);
+  assert.match(lastNotification(mock.notifications).message, /Disabled read, find, grep, ls/);
   assert.ok(mock.statuses.some(({ key }) => key === "pi-tools-switch-status"));
 });
 
 test("builtin enable and disable reject missing or invalid tools atomically", async () => {
-  const mock = setup();
+  const mock = await setup();
   const initial = mock.activeTools();
 
   await mock.invoke("ptsw-builtin-enable", "");
@@ -247,7 +277,7 @@ test("builtin enable and disable reject missing or invalid tools atomically", as
 });
 
 test("ptsw-builtin-reset restores the effective default preset", async () => {
-  const mock = setup();
+  const mock = await setup();
   mock.setActiveTools(["write", "external_tool"]);
   await mock.invoke("ptsw-builtin-reset");
   assert.deepEqual(mock.activeTools(), ["external_tool", "read", "find", "grep", "ls"]);
@@ -256,7 +286,7 @@ test("ptsw-builtin-reset restores the effective default preset", async () => {
 
 test("ptsw-builtin-reset does not mutate tools without an effective default", async () => {
   const config: Config = { ...TEST_CONFIG, defaultPreset: "missing" };
-  const mock = setup(config);
+  const mock = await setup(config);
   const initial = mock.activeTools();
   await mock.invoke("ptsw-builtin-reset");
   assert.deepEqual(mock.activeTools(), initial);
@@ -267,7 +297,7 @@ test("ptsw-builtin-reset does not mutate tools without an effective default", as
 });
 
 test("preset list and apply preserve listing, validation, and application behavior", async () => {
-  const mock = setup();
+  const mock = await setup();
   await mock.invoke("ptsw-preset-list");
   const list = lastNotification(mock.notifications);
   assert.equal(list.level, "info");
@@ -312,7 +342,7 @@ test("preset apply remains session-scoped and does not mutate config", async () 
     ...TEST_CONFIG,
     presets: { ...TEST_CONFIG.presets },
   };
-  const mock = setup(config);
+  const mock = await setup(config);
 
   await mock.invoke("ptsw-preset-apply", "custom");
   assert.equal(config.defaultPreset, "explore");
@@ -330,7 +360,7 @@ test("preset apply remains session-scoped and does not mutate config", async () 
 });
 
 test("mode list and show preserve summaries, details, and validation", async () => {
-  const mock = setup();
+  const mock = await setup();
   await mock.invoke("ptsw-mode-list");
   const list = lastNotification(mock.notifications);
   assert.equal(list.level, "info");

@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   BUILTIN_GATING_MODES,
+  EXIT_MODE_TOOL_NAME,
   buildBlockReason,
   buildModeMessage,
   decideToolCall,
@@ -17,7 +18,6 @@ import {
 import { resolveDir } from "../extension/utils.ts";
 
 const CWD = "C:/proj";
-const FINISH = ["finish_plan_mode"];
 const ABS_PLANS_DIR = resolveDir(".agents/plans", CWD);
 const BUILTIN_PLAN = BUILTIN_GATING_MODES["plan"];
 
@@ -78,25 +78,31 @@ test("matchAnyTrigger matches any non-empty trigger prefix", () => {
 });
 
 test("decideToolCall allows everything when no mode is active", () => {
-  const d = decideToolCall("bash", { command: "rm -rf /" }, undefined, undefined, FINISH, CWD);
+  const d = decideToolCall("bash", { command: "rm -rf /" }, undefined, undefined, CWD);
   assert.deepEqual(d, { allowed: true });
 });
 
-test("decideToolCall allows finish tools", () => {
-  const d = decideToolCall("finish_plan_mode", { summary: "done" }, "plan", BUILTIN_PLAN, FINISH, CWD);
+test("decideToolCall allows exit_mode", () => {
+  const d = decideToolCall(
+    EXIT_MODE_TOOL_NAME,
+    { mode: "plan", summary: "done" },
+    "plan",
+    BUILTIN_PLAN,
+    CWD,
+  );
   assert.deepEqual(d, { allowed: true });
 });
 
 test("decideToolCall allows read-only tools", () => {
   for (const tool of ["read", "find", "grep", "ls"]) {
-    const d = decideToolCall(tool, {}, "plan", BUILTIN_PLAN, FINISH, CWD);
+    const d = decideToolCall(tool, {}, "plan", BUILTIN_PLAN, CWD);
     assert.equal(d.allowed, true, `${tool} should be allowed`);
   }
 });
 
 test("decideToolCall allows allowTools entries", () => {
   const mode = { ...BUILTIN_PLAN, allowTools: ["bash"] };
-  const d = decideToolCall("bash", { command: "echo hi" }, "plan", mode, FINISH, CWD);
+  const d = decideToolCall("bash", { command: "echo hi" }, "plan", mode, CWD);
   assert.deepEqual(d, { allowed: true });
 });
 
@@ -107,7 +113,6 @@ test("decideToolCall allows write/edit inside allowWriteDir", () => {
       { path: "C:/proj/.agents/plans/plan.md" },
       "plan",
       BUILTIN_PLAN,
-      FINISH,
       CWD,
     );
     assert.equal(d.allowed, true, `${tool} inside allowWriteDir should be allowed`);
@@ -121,7 +126,6 @@ test("decideToolCall blocks write/edit outside allowWriteDir with reason", () =>
       { path: "C:/proj/src/file.ts" },
       "plan",
       BUILTIN_PLAN,
-      FINISH,
       CWD,
     );
     assert.equal(d.allowed, false, `${tool} outside should be blocked`);
@@ -136,27 +140,27 @@ test("decideToolCall blocks write/edit outside allowWriteDir with reason", () =>
 
 test("decideToolCall blocks write/edit when allowWriteDir is empty (no dir suffix)", () => {
   const mode = { trigger: ["X:"], allowTools: [], allowWriteDir: [] };
-  const d = decideToolCall("write", { path: "C:/anything.md" }, "x", mode, FINISH, CWD);
+  const d = decideToolCall("write", { path: "C:/anything.md" }, "x", mode, CWD);
   assert.equal(d.allowed, false);
   assert.equal(d.reason, "In x mode, file modification is not allowed");
 });
 
 test("decideToolCall allows write when allowTools includes it (bypasses dir check)", () => {
   const mode = { ...BUILTIN_PLAN, allowTools: ["write"] };
-  const d = decideToolCall("write", { path: "C:/anywhere.md" }, "plan", mode, FINISH, CWD);
+  const d = decideToolCall("write", { path: "C:/anywhere.md" }, "plan", mode, CWD);
   assert.deepEqual(d, { allowed: true });
 });
 
 test("decideToolCall blocks other tools (bash, external) with reason", () => {
   for (const tool of ["bash", "my_custom_tool"]) {
-    const d = decideToolCall(tool, {}, "plan", BUILTIN_PLAN, FINISH, CWD);
+    const d = decideToolCall(tool, {}, "plan", BUILTIN_PLAN, CWD);
     assert.equal(d.allowed, false, `${tool} should be blocked`);
     assert.ok(
       d.reason?.includes("In plan mode, this tool is not allowed"),
       `reason prefix: ${d.reason}`,
     );
     assert.ok(
-      d.reason?.includes("Allowed tools: finish_plan_mode, read, find, grep, ls"),
+      d.reason?.includes("Allowed tools: exit_mode, read, find, grep, ls"),
       `reason lists allowed: ${d.reason}`,
     );
     assert.ok(
@@ -168,10 +172,10 @@ test("decideToolCall blocks other tools (bash, external) with reason", () => {
 
 test("decideToolCall appends allowTools to the allowed-tools list", () => {
   const mode = { ...BUILTIN_PLAN, allowTools: ["bash", "my_tool"] };
-  const d = decideToolCall("python", {}, "plan", mode, FINISH, CWD);
+  const d = decideToolCall("python", {}, "plan", mode, CWD);
   assert.equal(d.allowed, false);
   assert.ok(
-    d.reason?.includes("Allowed tools: finish_plan_mode, read, find, grep, ls, bash, my_tool"),
+    d.reason?.includes("Allowed tools: exit_mode, read, find, grep, ls, bash, my_tool"),
     `reason: ${d.reason}`,
   );
 });
@@ -181,14 +185,14 @@ test("buildBlockReason notes write/edit as not allowed when allowWriteDir is emp
   const reason = buildBlockReason("x", mode);
   assert.equal(
     reason,
-    "In x mode, this tool is not allowed. Allowed tools: finish_x_mode, read, find, grep, ls. write/edit are not allowed",
+    "In x mode, this tool is not allowed. Allowed tools: exit_mode, read, find, grep, ls. write/edit are not allowed",
   );
 });
 
 test("decideToolCall blocks write with missing or non-string path", () => {
-  const d1 = decideToolCall("write", {}, "plan", BUILTIN_PLAN, FINISH, CWD);
+  const d1 = decideToolCall("write", {}, "plan", BUILTIN_PLAN, CWD);
   assert.equal(d1.allowed, false);
-  const d2 = decideToolCall("write", { path: 42 }, "plan", BUILTIN_PLAN, FINISH, CWD);
+  const d2 = decideToolCall("write", { path: 42 }, "plan", BUILTIN_PLAN, CWD);
   assert.equal(d2.allowed, false);
 });
 
@@ -224,7 +228,7 @@ test("buildModeMessage states the active mode, allowed tools, and write dirs", (
   const msg = buildModeMessage("plan", BUILTIN_PLAN, CWD);
   assert.ok(msg.includes("You are in plan mode"), `states mode: ${msg}`);
   assert.ok(
-    msg.includes("Allowed tools: finish_plan_mode, read, find, grep, ls"),
+    msg.includes("Allowed tools: exit_mode, read, find, grep, ls"),
     `lists allowed: ${msg}`,
   );
   assert.ok(
@@ -242,7 +246,7 @@ test("buildModeMessage appends allowTools and notes write/edit not allowed when 
   const mode = { trigger: ["X:"], allowTools: ["bash"], allowWriteDir: [] };
   const msg = buildModeMessage("x", mode, CWD);
   assert.ok(
-    msg.includes("Allowed tools: finish_x_mode, read, find, grep, ls, bash"),
+    msg.includes("Allowed tools: exit_mode, read, find, grep, ls, bash"),
     `lists allowTools: ${msg}`,
   );
   assert.ok(msg.includes("write/edit are not allowed"), `notes write: ${msg}`);

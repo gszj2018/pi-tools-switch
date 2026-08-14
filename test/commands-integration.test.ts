@@ -219,11 +219,11 @@ test("ptsw-builtin-status reports built-in and external tool state", async () =>
 test("builtin enable and disable support multiple tools and preserve external tools", async () => {
   const mock = setup();
   await mock.invoke("ptsw-builtin-enable", "write grep");
-  assert.deepEqual(mock.activeTools(), ["read", "external_tool", "write", "grep"]);
+  assert.deepEqual(mock.activeTools(), ["read", "external_tool", "exit_mode", "write", "grep"]);
   assert.match(lastNotification(mock.notifications).message, /Enabled write, grep/);
 
   await mock.invoke("ptsw-builtin-disable", "read grep");
-  assert.deepEqual(mock.activeTools(), ["external_tool", "write"]);
+  assert.deepEqual(mock.activeTools(), ["external_tool", "exit_mode", "write"]);
   assert.match(lastNotification(mock.notifications).message, /Disabled read, grep/);
   assert.ok(mock.statuses.some(({ key }) => key === "pi-tools-switch-status"));
 });
@@ -319,7 +319,7 @@ test("preset apply remains session-scoped and does not mutate config", async () 
   assert.deepEqual(config.presets, { custom: ["read", "grep"] });
 
   await mock.emit("session_start");
-  assert.deepEqual(mock.activeTools(), ["external_tool", "read", "find", "grep", "ls"]);
+  assert.deepEqual(mock.activeTools(), ["external_tool", "exit_mode", "read", "find", "grep", "ls"]);
   assert.deepEqual(
     mock.statuses.filter(({ key }) => key === "pi-tools-switch-status").at(-1),
     {

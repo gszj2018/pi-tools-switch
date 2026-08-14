@@ -2,7 +2,7 @@
  * Tool gating for pi-tools-switch: prefix-triggered modes that restrict tool
  * usage. A mode is activated by an input prefix and stays active across turns
  * until it is explicitly exited (the gating exit trigger, another mode's
- * trigger, or the finish tool's "accept and exit" choice).
+ * trigger, or exit_mode's "accept and exit" choice).
  *
  * Module-local state only: owns the active mode name and the
  * "pi-tools-switch-mode" status bar. No shared mutable state.
@@ -74,13 +74,11 @@ function buildWriteReason(modeName: string, mode: GatingModeConfig, cwd: string)
 }
 
 /**
- * Blocked reason for other tools: lists the allowed tools (finish, read-only,
- * and mode allowTools) and notes that write/edit are conditionally allowed.
+ * Blocked reason for other tools: lists exit_mode, read-only tools, and mode
+ * allowTools, then notes that write/edit are conditionally allowed.
  */
 export function buildBlockReason(modeName: string, mode: GatingModeConfig): string {
-  const allowed = [
-    ...new Set([`finish_${modeName}_mode`, ...READ_ONLY_TOOLS, ...mode.allowTools]),
-  ];
+  const allowed = [...new Set([EXIT_MODE_TOOL_NAME, ...READ_ONLY_TOOLS, ...mode.allowTools])];
   let reason = `In ${modeName} mode, this tool is not allowed. Allowed tools: ${allowed.join(", ")}`;
   reason +=
     mode.allowWriteDir.length > 0
@@ -101,9 +99,7 @@ export function buildModeMessage(
   if (!modeName || !mode) {
     return `You are not currently in any gating mode. You may call any available tool.`;
   }
-  const allowed = [
-    ...new Set([`finish_${modeName}_mode`, ...READ_ONLY_TOOLS, ...mode.allowTools]),
-  ];
+  const allowed = [...new Set([EXIT_MODE_TOOL_NAME, ...READ_ONLY_TOOLS, ...mode.allowTools])];
   let text = `You are in ${modeName} mode. Allowed tools: ${allowed.join(", ")}`;
   if (mode.allowWriteDir.length > 0) {
     // Backticks render the path as an inline code span, which preserves the
@@ -137,19 +133,18 @@ interface GatingDecision {
 
 /**
  * Decide whether a tool call is allowed under the active gating mode.
- * Check order: inactive -> finish tool -> read-only -> allowTools ->
- * write/edit with allowWriteDir -> block everything else.
+ * Check order: inactive -> exit_mode -> read-only -> allowTools -> write/edit
+ * with allowWriteDir -> block everything else.
  */
 export function decideToolCall(
   toolName: string,
   input: unknown,
   modeName: string | undefined,
   mode: GatingModeConfig | undefined,
-  finishToolNames: readonly string[],
   cwd: string,
 ): GatingDecision {
   if (!mode || !modeName) return { allowed: true };
-  if (finishToolNames.includes(toolName)) return { allowed: true };
+  if (toolName === EXIT_MODE_TOOL_NAME) return { allowed: true };
   if (READ_ONLY_TOOLS.includes(toolName)) return { allowed: true };
   if (mode.allowTools.includes(toolName)) return { allowed: true };
   if (toolName === "write" || toolName === "edit") {
@@ -167,10 +162,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   const modes = mergeGatingModes(getConfig().gatingModes);
   // Exit-trigger prefixes cached once at load time (rebuilt on extension reload).
   const exitTriggers = getConfig().gatingExitTrigger;
-  // Finish tool names derive from the cached modes and never change at runtime
-  // (rebuilt on extension reload), so they are cached here too.
-  const finishToolNames = Object.keys(modes).map((name) => `finish_${name}_mode`);
-  const finishToolNameSet = new Set(finishToolNames);
 
   let activeModeName: string | undefined;
   let activeMode: GatingModeConfig | undefined;
@@ -186,24 +177,13 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     ctx.ui.setStatus(MODE_STATUS_BAR_KEY, formatModeStatus(activeModeName));
   };
 
-  const removeFinishTools = (): void => {
-    pi.setActiveTools(pi.getActiveTools().filter((tool) => !finishToolNameSet.has(tool)));
-  };
-
   const setMode = (name: string | undefined, ctx: ExtensionContext): void => {
     if (name === undefined) {
       activeModeName = undefined;
       activeMode = undefined;
-      removeFinishTools();
     } else {
       const mode = modes[name];
       if (!mode) return;
-      // Switching modes: only the active mode's finish tool may be present, so
-      // drop every finish tool first, then add the new mode's own.
-      pi.setActiveTools([
-        ...pi.getActiveTools().filter((tool) => !finishToolNameSet.has(tool)),
-        `finish_${name}_mode`,
-      ]);
       activeModeName = name;
       activeMode = mode;
     }
@@ -300,76 +280,9 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     ensureExitModeActive();
   };
 
-  const registerFinishTool = (modeName: string): void => {
-    const toolName = `finish_${modeName}_mode`;
-    pi.registerTool({
-      name: toolName,
-      label: `Finish ${modeName} mode`,
-      description: `Finish ${modeName} mode: submit the final summary.`,
-      parameters: Type.Object({
-        summary: Type.String({ description: "Summary of the completed mode work." }),
-      }),
-      async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-        const acceptAndExit = (): {
-          content: { type: "text"; text: string }[];
-          details: Record<string, unknown>;
-          terminate: true;
-        } => {
-          ctx.ui.notify(params.summary, "info");
-          // Accept-and-exit turns the gate off as part of this choice.
-          setMode(undefined, ctx);
-          return {
-            content: [
-              { type: "text", text: `The user has accepted. Exiting ${modeName} mode now.` },
-            ],
-            details: { summary: params.summary },
-            terminate: true,
-          };
-        };
-        const acceptAndStay = (): {
-          content: { type: "text"; text: string }[];
-          details: Record<string, unknown>;
-          terminate: true;
-        } => {
-          ctx.ui.notify(params.summary, "info");
-          return {
-            content: [
-              { type: "text", text: `The user has accepted. You are still in ${modeName} mode.` },
-            ],
-            details: { summary: params.summary },
-            terminate: true,
-          };
-        };
-        if (!ctx.hasUI) return acceptAndExit();
-        const choice = await ctx.ui.select(
-          `${modeName} mode: accept and exit, accept and stay, or refine?\n${params.summary}`,
-          ["Accept and exit mode", "Accept and stay in mode", "Refine"],
-        );
-        if (choice === "Accept and stay in mode") return acceptAndStay();
-        if (choice === "Refine") {
-          const refinement = (await ctx.ui.input("Refinement:", ""))?.trim() ?? "";
-          const hint = refinement ? ` Refinement hint: ${refinement}` : "";
-          return {
-            content: [
-              {
-                type: "text",
-                text: `The user requested further improvements. You are still in ${modeName} mode.${hint}`,
-              },
-            ],
-            details: { summary: params.summary },
-          };
-        }
-        return acceptAndExit();
-      },
-    });
-  };
-
-  // Register the stable completion tool at extension load time and keep the
-  // legacy per-mode tools until the dynamic-tool removal step is applied.
+  // Register one stable completion tool for every gating mode. Mode changes
+  // update only module-local state and never alter the active tool schema.
   registerExitModeTool();
-  for (const name of Object.keys(modes)) {
-    registerFinishTool(name);
-  }
 
   pi.on("session_start", async (_event, ctx) => {
     // New session: no reported mode yet and the guard is down; reset through
@@ -417,7 +330,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
       event.input,
       activeModeName,
       activeMode,
-      finishToolNames,
       ctx.cwd,
     );
     if (!decision.allowed) {
@@ -444,8 +356,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
 
   pi.on("agent_settled", async (_event, ctx) => {
     // Drop the guard only. The mode persists across turns until it is
-    // explicitly exited (exit trigger, another mode's trigger, or the finish
-    // tool's accept-and-exit).
+    // explicitly exited (exit trigger, another mode's trigger, or exit_mode's
+    // accept-and-exit).
     modeGuardActive = false;
     refreshStatus(ctx);
   });

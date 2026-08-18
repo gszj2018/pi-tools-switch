@@ -29,8 +29,16 @@ interface MockUi {
   input: () => Promise<string>;
 }
 
-/** A minimal extension context with a configurable UI. */
-function createMockCtx(overrides: { cwd?: string; hasUI?: boolean; ui?: Partial<MockUi> } = {}): ExtensionContext {
+/** A minimal extension context with a configurable UI and active branch. */
+function createMockCtx(
+  overrides: {
+    cwd?: string;
+    hasUI?: boolean;
+    ui?: Partial<MockUi>;
+    branch?: unknown[];
+    branchError?: Error;
+  } = {},
+): ExtensionContext {
   const baseUi: MockUi = {
     setStatus: () => {},
     notify: () => {},
@@ -41,6 +49,12 @@ function createMockCtx(overrides: { cwd?: string; hasUI?: boolean; ui?: Partial<
     cwd: overrides.cwd ?? CWD,
     hasUI: overrides.hasUI ?? false,
     ui: { ...baseUi, ...(overrides.ui ?? {}) },
+    sessionManager: {
+      getBranch: () => {
+        if (overrides.branchError) throw overrides.branchError;
+        return (overrides.branch ?? []) as never;
+      },
+    },
   } as unknown as ExtensionContext;
 }
 
@@ -112,7 +126,12 @@ function setup(config: Config = DEFAULT_CONFIG) {
 
 /** Extract the injected mode-state message from a before_agent_start result. */
 interface InjectedMessage {
-  message: { customType: string; content: string; display: boolean };
+  message: {
+    customType: string;
+    content: string;
+    display: boolean;
+    details?: { modeName?: string };
+  };
 }
 
 function injected(result: unknown): InjectedMessage["message"] | undefined {
@@ -179,16 +198,69 @@ test("registers one stable exit_mode with fixed prompt metadata and schema", asy
   assert.match(schema.properties?.summary?.description ?? "", /full deliverable separately/);
 });
 
-test("first turn without a trigger injects the no-mode message", async () => {
+test("first turn without a trigger skips injection when branch replay reports no mode", async () => {
   const { emit, activeTools } = setup();
   await emit("session_start");
   assert.deepEqual(activeTools(), [EXIT_MODE_TOOL_NAME]);
+  assert.equal(await emit("before_agent_start"), undefined);
+});
+
+test("session_start replays a prior mode and injects the current no-mode state", async () => {
+  const { emit } = setup();
+  const ctx = createMockCtx({
+    branch: [
+      {
+        type: "custom_message",
+        customType: "pi-tools-switch-mode",
+        details: { modeName: "plan" },
+      },
+    ],
+  });
+  await emit("session_start", {}, ctx);
   const msg = injected(await emit("before_agent_start"));
-  assert.ok(msg, "expected a mode-state message on the first turn");
-  assert.equal(msg!.customType, "pi-tools-switch-mode");
-  assert.equal(msg!.display, true);
+  assert.ok(msg, "expected a changed state to be injected");
   assert.match(msg!.content, /not currently in any gating mode/);
-  assert.match(msg!.content, /any available tool/);
+  assert.deepEqual(msg!.details, { modeName: undefined });
+});
+
+test("session_start reports a replay failure and forces a mode-state injection", async () => {
+  const { emit } = setup();
+  const notifications: string[] = [];
+  const ctx = createMockCtx({
+    branchError: new Error("session unavailable"),
+    ui: { notify: (text: string) => notifications.push(text) },
+  });
+  await emit("session_start", {}, ctx);
+  const msg = injected(await emit("before_agent_start"));
+  assert.ok(msg, "unknown replay state must be reported again");
+  assert.deepEqual(msg!.details, { modeName: undefined });
+  assert.deepEqual(notifications, [
+    "tools-switch: failed to restore gating state: session unavailable",
+  ]);
+});
+
+test("session_tree replays the newly active branch before the next injection", async () => {
+  const { emit } = setup();
+  await emit("session_start");
+  await emit("input", { text: "/plan-mode" });
+  assert.ok(injected(await emit("before_agent_start")));
+  await emit("agent_settled");
+  await emit(
+    "session_tree",
+    {},
+    createMockCtx({
+      branch: [
+        {
+          type: "custom_message",
+          customType: "pi-tools-switch-mode",
+          details: { modeName: undefined },
+        },
+      ],
+    }),
+  );
+  const msg = injected(await emit("before_agent_start"));
+  assert.ok(msg, "the active plan mode differs from the restored no-mode state");
+  assert.deepEqual(msg!.details, { modeName: "plan" });
 });
 
 test("entering a mode injects the mode-state message without changing active tools", async () => {
@@ -273,9 +345,7 @@ test("the exit trigger with no active mode is harmless", async () => {
   await emit("session_start");
   await emit("input", { text: "/normal-mode" });
   assert.deepEqual(activeTools(), [EXIT_MODE_TOOL_NAME]);
-  const msg = injected(await emit("before_agent_start"));
-  assert.ok(msg, "the first turn still reports the no-mode state");
-  assert.match(msg!.content, /not currently in any gating mode/);
+  assert.equal(await emit("before_agent_start"), undefined);
 });
 
 test("a non-empty configured exit trigger fully overrides the built-in prefix", async () => {

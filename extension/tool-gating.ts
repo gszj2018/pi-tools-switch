@@ -11,6 +11,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 import { READ_ONLY_TOOLS, isPathInDirs, resolveDir } from "./utils.ts";
 import { rejectUnexpectedArgs } from "./utils-pi.ts";
+import { replayLastReportedModeName } from "./tool-gating-replay.ts";
 import type { Config, GatingModeConfig } from "./config.ts";
 
 const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
@@ -74,9 +75,18 @@ export function matchTrigger(
   return undefined;
 }
 
-/** Status bar text: [M: <name>] or [M: -]. */
-export function formatModeStatus(name: string | undefined): string {
-  return `[M: ${name ?? "-"}]`;
+/** Render the reported and active mode names, including pending state changes. */
+export function formatModeStatus(
+  lastReported: string | undefined | null,
+  active: string | undefined,
+): string {
+  const formatName = (name: string | undefined | null): string => {
+    if (name === undefined) return "-";
+    if (name === null) return "?";
+    return name;
+  };
+  if (lastReported === active) return `[M: ${formatName(active)}]`;
+  return `[M: ${formatName(lastReported)} => ${formatName(active)}]`;
 }
 
 /** Blocked reason for write/edit when the target is outside allowWriteDir. */
@@ -131,9 +141,8 @@ export function buildModeMessage(
 
 /**
  * Whether a mode-state message should be injected for the current turn:
- * always on the first turn after session start (no reported mode yet), and
- * whenever the active mode differs from the mode reported by the previous
- * injected message.
+ * always when the previously reported state is unknown, and whenever the
+ * active mode differs from the mode reported by the previous injected message.
  */
 export function shouldInjectModeMessage(
   lastReportedModeName: string | undefined | null,
@@ -183,8 +192,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
 
   let activeModeName: string | undefined;
   let activeMode: GatingModeConfig | undefined;
-  // Mode reported by the last injected mode-state message; null = no message
-  // has been injected yet (first turn after session start).
+  // Start unknown until session_start restores the active branch. undefined
+  // means no gating mode; null means the persisted state could not be recognized.
   let lastReportedModeName: string | undefined | null = null;
   // Guard flag: raised once the mode is confirmed at before_agent_start and
   // cleared at agent_settled. While raised, input events (e.g. steering
@@ -192,7 +201,16 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   let modeGuardActive = false;
 
   const refreshStatus = (ctx: ExtensionContext): void => {
-    ctx.ui.setStatus(MODE_STATUS_BAR_KEY, formatModeStatus(activeModeName));
+    ctx.ui.setStatus(MODE_STATUS_BAR_KEY, formatModeStatus(lastReportedModeName, activeModeName));
+  };
+
+  const restoreReportedMode = (ctx: ExtensionContext): void => {
+    const result = replayLastReportedModeName(ctx);
+    if (result.error) {
+      ctx.ui.notify(`tools-switch: failed to restore gating state: ${result.error}`, "error");
+    }
+    lastReportedModeName = result.modeName;
+    refreshStatus(ctx);
   };
 
   const setMode = (name: string | undefined, ctx: ExtensionContext): void => {
@@ -302,12 +320,16 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   registerExitModeTool();
 
   pi.on("session_start", async (_event, ctx) => {
-    // New session: no reported mode yet and the guard is down; reset through
-    // the single state-change entry point.
+    // A new session starts without an active mode, while the reported state is
+    // recovered from the active branch before deciding whether to inject.
     modeGuardActive = false;
-    lastReportedModeName = null;
+    restoreReportedMode(ctx);
     setMode(undefined, ctx);
     ensureExitModeActive();
+  });
+
+  pi.on("session_tree", async (_event, ctx) => {
+    restoreReportedMode(ctx);
   });
 
   pi.on("input", async (event, ctx) => {
@@ -362,11 +384,13 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     // Record the mode for the next turn's comparison right away; settle only
     // drops the guard.
     lastReportedModeName = activeModeName;
+    refreshStatus(ctx);
     return {
       message: {
         customType: "pi-tools-switch-mode",
         content: buildModeMessage(activeModeName, activeMode, ctx.cwd),
         display: true,
+        details: { modeName: activeModeName },
       },
     };
   });

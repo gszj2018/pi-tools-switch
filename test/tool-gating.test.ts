@@ -213,17 +213,19 @@ test("decideToolCall blocks write with missing or non-string path", () => {
   assert.equal(d2.allowed, false);
 });
 
-test("formatModeStatus renders active and inactive", () => {
-  assert.equal(formatModeStatus(undefined), "[M: -]");
-  assert.equal(formatModeStatus("plan"), "[M: plan]");
+test("formatModeStatus renders matching and pending reported states", () => {
+  assert.equal(formatModeStatus("plan", "plan"), "[M: plan]");
+  assert.equal(formatModeStatus("plan", undefined), "[M: plan => -]");
+  assert.equal(formatModeStatus(undefined, "plan"), "[M: - => plan]");
+  assert.equal(formatModeStatus("plan", "explore"), "[M: plan => explore]");
+  assert.equal(formatModeStatus(null, undefined), "[M: ? => -]");
+  assert.equal(formatModeStatus(null, "plan"), "[M: ? => plan]");
+  assert.equal(formatModeStatus(undefined, undefined), "[M: -]");
 });
 
-test("shouldInjectModeMessage always injects on the first turn (no reported mode yet)", () => {
+test("shouldInjectModeMessage forces injection only when the reported state is unknown", () => {
   assert.equal(shouldInjectModeMessage(null, undefined), true);
   assert.equal(shouldInjectModeMessage(null, "plan"), true);
-});
-
-test("shouldInjectModeMessage skips injection when the mode is unchanged", () => {
   assert.equal(shouldInjectModeMessage(undefined, undefined), false);
   assert.equal(shouldInjectModeMessage("plan", "plan"), false);
 });

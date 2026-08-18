@@ -31,9 +31,9 @@ export function replayLastReportedModeName(ctx: ExtensionContext): ReplayResult 
       }
 
       const { modeName } = details;
-      if (typeof modeName === "string" || modeName === undefined) {
-        return { modeName };
-      }
+      if (typeof modeName === "string") return { modeName };
+      // null is the JSON-safe persisted representation of no active mode.
+      if (modeName === null) return { modeName: undefined };
       return { modeName: null };
     }
     return { modeName: undefined };

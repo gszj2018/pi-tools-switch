@@ -130,7 +130,7 @@ interface InjectedMessage {
     customType: string;
     content: string;
     display: boolean;
-    details?: { modeName?: string };
+    details?: { modeName: string | null };
   };
 }
 
@@ -220,7 +220,7 @@ test("session_start replays a prior mode and injects the current no-mode state",
   const msg = injected(await emit("before_agent_start"));
   assert.ok(msg, "expected a changed state to be injected");
   assert.match(msg!.content, /not currently in any gating mode/);
-  assert.deepEqual(msg!.details, { modeName: undefined });
+  assert.deepEqual(msg!.details, { modeName: null });
 });
 
 test("session_start reports a replay failure and forces a mode-state injection", async () => {
@@ -233,7 +233,7 @@ test("session_start reports a replay failure and forces a mode-state injection",
   await emit("session_start", {}, ctx);
   const msg = injected(await emit("before_agent_start"));
   assert.ok(msg, "unknown replay state must be reported again");
-  assert.deepEqual(msg!.details, { modeName: undefined });
+  assert.deepEqual(msg!.details, { modeName: null });
   assert.deepEqual(notifications, [
     "tools-switch: failed to restore gating state: session unavailable",
   ]);
@@ -253,7 +253,7 @@ test("session_tree replays the newly active branch before the next injection", a
         {
           type: "custom_message",
           customType: "pi-tools-switch-mode",
-          details: { modeName: undefined },
+          details: { modeName: null },
         },
       ],
     }),

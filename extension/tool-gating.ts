@@ -390,7 +390,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
         customType: "pi-tools-switch-mode",
         content: buildModeMessage(activeModeName, activeMode, ctx.cwd),
         display: true,
-        details: { modeName: activeModeName },
+        // JSON omits undefined properties, so persist no active mode as null.
+        details: { modeName: activeModeName ?? null },
       },
     };
   });

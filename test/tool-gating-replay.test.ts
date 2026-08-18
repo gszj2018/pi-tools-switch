@@ -28,8 +28,15 @@ test("replayLastReportedModeName returns undefined when the active branch has no
   assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
 });
 
-test("replayLastReportedModeName restores an explicit no-mode state", () => {
-  const ctx = createContext(() => [modeMessage({ modeName: undefined })]);
+test("replayLastReportedModeName restores an explicit persisted no-mode state", () => {
+  const ctx = createContext(() => [modeMessage({ modeName: null })]);
+
+  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
+});
+
+test("replayLastReportedModeName preserves the no-mode marker through JSON serialization", () => {
+  const persistedMessage = JSON.parse(JSON.stringify(modeMessage({ modeName: null })));
+  const ctx = createContext(() => [persistedMessage]);
 
   assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
 });
@@ -61,7 +68,14 @@ test("replayLastReportedModeName skips non-custom-message entries", () => {
 });
 
 test("replayLastReportedModeName treats missing or malformed details as unknown", () => {
-  for (const details of [undefined, null, "modeName", {}, { modeName: 42 }, { modeName: false }]) {
+  for (const details of [
+    undefined,
+    "modeName",
+    {},
+    { modeName: undefined },
+    { modeName: 42 },
+    { modeName: false },
+  ]) {
     const ctx = createContext(() => [modeMessage(details)]);
     assert.deepEqual(replayLastReportedModeName(ctx), { modeName: null });
   }

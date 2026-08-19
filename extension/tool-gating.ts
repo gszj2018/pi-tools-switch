@@ -9,9 +9,14 @@
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { Text } from "@earendil-works/pi-tui";
 import { READ_ONLY_TOOLS, isPathInDirs, resolveDir } from "./utils.ts";
 import { rejectUnexpectedArgs } from "./utils-pi.ts";
-import { replayLastReportedModeName } from "./tool-gating-replay.ts";
+import {
+  MODE_TRIGGER_CUSTOM_TYPE,
+  replayLastReportedModeName,
+  replayLastTriggeredModeName,
+} from "./tool-gating-replay.ts";
 import type { Config, GatingModeConfig } from "./config.ts";
 
 const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
@@ -151,6 +156,17 @@ export function shouldInjectModeMessage(
   return lastReportedModeName === null || activeModeName !== lastReportedModeName;
 }
 
+/** Format a persisted trigger entry as a compact TUI history line. */
+export function formatModeTriggerEntry(data: unknown): string {
+  if (data !== null && typeof data === "object" && "modeName" in data) {
+    if (typeof data.modeName === "string") {
+      return `Triggered: tool gating enabled. (mode: ${data.modeName})`;
+    }
+    if (data.modeName === null) return "Triggered: tool gating disabled.";
+  }
+  return "Triggered: tool gating record is invalid.";
+}
+
 interface GatingDecision {
   allowed: boolean;
   reason?: string;
@@ -213,18 +229,56 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     refreshStatus(ctx);
   };
 
-  const setMode = (name: string | undefined, ctx: ExtensionContext): void => {
+  /** Apply a configured mode (or no mode), returning false for an unknown name. */
+  const setMode = (name: string | undefined, ctx: ExtensionContext): boolean => {
     if (name === undefined) {
       activeModeName = undefined;
       activeMode = undefined;
     } else {
       const mode = modes[name];
-      if (!mode) return;
+      if (!mode) return false;
       activeModeName = name;
       activeMode = mode;
     }
     refreshStatus(ctx);
+    return true;
   };
+
+  const appendModeTrigger = (name: string | undefined, ctx: ExtensionContext): void => {
+    try {
+      pi.appendEntry(MODE_TRIGGER_CUSTOM_TYPE, { modeName: name ?? null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      ctx.ui.notify(`tools-switch: failed to persist gating trigger: ${message}`, "error");
+    }
+  };
+
+  /** Change modes from a user/runtime trigger and persist actual transitions. */
+  const triggerMode = (name: string | undefined, ctx: ExtensionContext): boolean => {
+    if (name === activeModeName) return false;
+    if (!setMode(name, ctx)) return false;
+    appendModeTrigger(name, ctx);
+    return true;
+  };
+
+  const restoreTriggeredMode = (ctx: ExtensionContext): void => {
+    const result = replayLastTriggeredModeName(ctx);
+    if (result.modeName === null) {
+      const reason = result.error ?? "invalid trigger record";
+      ctx.ui.notify(`tools-switch: failed to restore gating mode: ${reason}`, "error");
+      return;
+    }
+    if (!setMode(result.modeName, ctx)) {
+      ctx.ui.notify(
+        `tools-switch: failed to restore gating mode: unknown mode "${result.modeName}"`,
+        "error",
+      );
+    }
+  };
+
+  pi.registerEntryRenderer(MODE_TRIGGER_CUSTOM_TYPE, (entry, _options, theme) =>
+    new Text(theme.fg("muted", formatModeTriggerEntry(entry.data)), 0, 0),
+  );
 
   const ensureExitModeActive = (): void => {
     const activeTools = pi.getActiveTools();
@@ -268,7 +322,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
           terminate: true;
         } => {
           ctx.ui.notify(params.summary, "info");
-          setMode(undefined, ctx);
+          triggerMode(undefined, ctx);
           return {
             content: [
               { type: "text", text: `The user has accepted. Exiting ${modeName} mode now.` },
@@ -320,16 +374,17 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   registerExitModeTool();
 
   pi.on("session_start", async (_event, ctx) => {
-    // A new session starts without an active mode, while the reported state is
-    // recovered from the active branch before deciding whether to inject.
+    // Restore the report state before the active mode so a matching trigger
+    // record does not require another mode-state message on the next turn.
     modeGuardActive = false;
     restoreReportedMode(ctx);
-    setMode(undefined, ctx);
+    restoreTriggeredMode(ctx);
     ensureExitModeActive();
   });
 
   pi.on("session_tree", async (_event, ctx) => {
     restoreReportedMode(ctx);
+    restoreTriggeredMode(ctx);
   });
 
   pi.on("input", async (event, ctx) => {
@@ -352,11 +407,11 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     // A mode trigger activates/switches the mode; otherwise any exit-trigger
     // match exits the active mode (harmless when none is active).
     if (modeMatch) {
-      setMode(modeMatch, ctx);
+      triggerMode(modeMatch, ctx);
       return;
     }
     if (exitMatch) {
-      setMode(undefined, ctx);
+      triggerMode(undefined, ctx);
       return;
     }
     refreshStatus(ctx);

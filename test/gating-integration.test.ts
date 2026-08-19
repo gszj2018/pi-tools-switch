@@ -13,9 +13,11 @@ import {
   EXIT_MODE_PROMPT_GUIDELINES,
   EXIT_MODE_PROMPT_SNIPPET,
   EXIT_MODE_TOOL_NAME,
+  formatModeTriggerEntry,
   register,
 } from "../extension/tool-gating.ts";
 import { DEFAULT_CONFIG, type Config } from "../extension/config.ts";
+import { MODE_TRIGGER_CUSTOM_TYPE } from "../extension/tool-gating-replay.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const CWD = "C:/proj";
@@ -76,6 +78,8 @@ interface MockPi {
   setActiveTools: (tools: string[]) => void;
   registerTool: (def: RegisteredTool) => void;
   registerCommand: () => void;
+  appendEntry: (customType: string, data?: unknown) => void;
+  registerEntryRenderer: (customType: string, renderer: (entry: { data?: unknown }) => unknown) => void;
 }
 
 /** A mock pi capturing event handlers and tool registrations. */
@@ -84,6 +88,8 @@ function createMockPi() {
   let activeTools: string[] = [];
   const tools: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
   const toolDefinitions: Record<string, RegisteredTool> = {};
+  const appendedEntries: Array<{ customType: string; data?: unknown }> = [];
+  const entryRenderers: Record<string, (entry: { data?: unknown }) => unknown> = {};
   const pi = {
     on(event: string, handler: Handler) {
       handlers.push({ event, handler });
@@ -104,6 +110,12 @@ function createMockPi() {
       toolDefinitions[def.name] = def;
     },
     registerCommand: () => {},
+    appendEntry(customType: string, data?: unknown) {
+      appendedEntries.push({ customType, data });
+    },
+    registerEntryRenderer(customType: string, renderer: (entry: { data?: unknown }) => unknown) {
+      entryRenderers[customType] = renderer;
+    },
   } as MockPi;
 
   return {
@@ -114,6 +126,8 @@ function createMockPi() {
     activeTools: (): string[] => activeTools,
     tools,
     toolDefinitions,
+    appendedEntries,
+    entryRenderers,
   };
 }
 
@@ -236,6 +250,7 @@ test("session_start reports a replay failure and forces a mode-state injection",
   assert.deepEqual(msg!.details, { modeName: null });
   assert.deepEqual(notifications, [
     "tools-switch: failed to restore gating state: session unavailable",
+    "tools-switch: failed to restore gating mode: session unavailable",
   ]);
 });
 
@@ -250,6 +265,7 @@ test("session_tree replays the newly active branch before the next injection", a
     {},
     createMockCtx({
       branch: [
+        { type: "custom", customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: "plan" } },
         {
           type: "custom_message",
           customType: "pi-tools-switch-mode",
@@ -594,4 +610,136 @@ test("exit_mode Refine omits the hint when the refinement input is blank", async
   assert.equal(result.terminate, undefined);
   assert.doesNotMatch(result.content?.[0]?.text ?? "", /Refinement hint/);
   assert.deepEqual(result.details, { summary: "done" });
+});
+
+// --- E. Persisted mode triggers and replay ---------------------------------
+
+test("records input mode transitions without recording no-op triggers", async () => {
+  const { emit, appendedEntries } = setup(EXPLORE_CONFIG);
+  await emit("session_start");
+  await emit("input", { text: "/plan-mode" });
+  await emit("input", { text: "/plan-mode again" });
+  await emit("input", { text: "/skill:explore" });
+  await emit("input", { text: "/normal-mode" });
+
+  assert.deepEqual(appendedEntries, [
+    { customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: "plan" } },
+    { customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: "explore" } },
+    { customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: null } },
+  ]);
+});
+
+test("exit_mode records only an accepted exit, not stay or refine", async () => {
+  const { emit, tools, appendedEntries } = setup();
+  await emit("session_start");
+  await emit("input", { text: "/plan-mode" });
+  await tools[EXIT_MODE_TOOL_NAME](
+    "id",
+    { mode: "plan", summary: "stay" },
+    undefined,
+    undefined,
+    createMockCtx({ hasUI: true, ui: { select: async () => "Accept and stay in mode" } }),
+  );
+  await tools[EXIT_MODE_TOOL_NAME](
+    "id",
+    { mode: "plan", summary: "refine" },
+    undefined,
+    undefined,
+    createMockCtx({ hasUI: true, ui: { select: async () => "Refine", input: async () => "more" } }),
+  );
+  await tools[EXIT_MODE_TOOL_NAME](
+    "id",
+    { mode: "plan", summary: "exit" },
+    undefined,
+    undefined,
+    createMockCtx(),
+  );
+
+  assert.deepEqual(appendedEntries, [
+    { customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: "plan" } },
+    { customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: null } },
+  ]);
+});
+
+test("session_start restores a persisted mode without a duplicate state message", async () => {
+  const { emit } = setup();
+  const ctx = createMockCtx({
+    branch: [
+      { type: "custom", customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: "plan" } },
+      {
+        type: "custom_message",
+        customType: "pi-tools-switch-mode",
+        details: { modeName: "plan" },
+      },
+    ],
+  });
+  await emit("session_start", {}, ctx);
+
+  assert.equal(await emit("before_agent_start"), undefined);
+  const gated = blocked(await emit("tool_call", { toolName: "bash", input: { command: "x" } }, ctx));
+  assert.match(gated?.reason ?? "", /In plan mode/);
+});
+
+test("session_tree restores the persisted disabled state", async () => {
+  const { emit } = setup();
+  await emit("session_start");
+  await emit("input", { text: "/plan-mode" });
+  await emit(
+    "session_tree",
+    {},
+    createMockCtx({
+      branch: [{ type: "custom", customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: null } }],
+    }),
+  );
+
+  const allowed = await emit("tool_call", { toolName: "bash", input: { command: "x" } });
+  assert.equal(allowed, undefined, "a persisted disabled state must ungate tools");
+});
+
+test("an invalid persisted trigger only notifies and leaves the current mode unchanged", async () => {
+  const { emit } = setup();
+  const notifications: string[] = [];
+  await emit("session_start");
+  await emit("input", { text: "/plan-mode" });
+  await emit(
+    "session_tree",
+    {},
+    createMockCtx({
+      branch: [{ type: "custom", customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: 42 } }],
+      ui: { notify: (text: string) => notifications.push(text) },
+    }),
+  );
+
+  const gated = blocked(await emit("tool_call", { toolName: "bash", input: { command: "x" } }));
+  assert.match(gated?.reason ?? "", /In plan mode/);
+  assert.deepEqual(notifications, ["tools-switch: failed to restore gating mode: invalid trigger record"]);
+});
+
+test("a removed persisted mode only notifies and does not switch modes", async () => {
+  const { emit } = setup();
+  const notifications: string[] = [];
+  await emit("session_start");
+  await emit("input", { text: "/plan-mode" });
+  await emit(
+    "session_tree",
+    {},
+    createMockCtx({
+      branch: [{ type: "custom", customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: "removed" } }],
+      ui: { notify: (text: string) => notifications.push(text) },
+    }),
+  );
+
+  const gated = blocked(await emit("tool_call", { toolName: "bash", input: { command: "x" } }));
+  assert.match(gated?.reason ?? "", /In plan mode/);
+  assert.deepEqual(notifications, [
+    'tools-switch: failed to restore gating mode: unknown mode "removed"',
+  ]);
+});
+
+test("registers and formats the persisted trigger-entry renderer", () => {
+  const { entryRenderers } = setup();
+  assert.ok(entryRenderers[MODE_TRIGGER_CUSTOM_TYPE]);
+  assert.equal(formatModeTriggerEntry({ modeName: "plan" }), "Triggered: tool gating enabled. (mode: plan)");
+  assert.equal(formatModeTriggerEntry({ modeName: null }), "Triggered: tool gating disabled.");
+  assert.equal(formatModeTriggerEntry({}), "Triggered: tool gating record is invalid.");
 });

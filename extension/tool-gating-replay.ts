@@ -1,6 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-const MODE_MESSAGE_CUSTOM_TYPE = "pi-tools-switch-mode";
+/** Custom message type used to persist LLM-visible gating state reports. */
+export const MODE_MESSAGE_CUSTOM_TYPE = "pi-tools-switch-mode";
 
 /** Custom entry type used to persist real gating-mode transitions. */
 export const MODE_TRIGGER_CUSTOM_TYPE = "pi-tools-switch-trigger";

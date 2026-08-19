@@ -13,6 +13,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { READ_ONLY_TOOLS, isPathInDirs, resolveDir } from "./utils.ts";
 import { rejectUnexpectedArgs } from "./utils-pi.ts";
 import {
+  MODE_MESSAGE_CUSTOM_TYPE,
   MODE_TRIGGER_CUSTOM_TYPE,
   replayLastReportedModeName,
   replayLastTriggeredModeName,
@@ -442,7 +443,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     refreshStatus(ctx);
     return {
       message: {
-        customType: "pi-tools-switch-mode",
+        customType: MODE_MESSAGE_CUSTOM_TYPE,
         content: buildModeMessage(activeModeName, activeMode, ctx.cwd),
         display: true,
         // JSON omits undefined properties, so persist no active mode as null.

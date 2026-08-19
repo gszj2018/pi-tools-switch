@@ -17,7 +17,10 @@ import {
   register,
 } from "../extension/tool-gating.ts";
 import { DEFAULT_CONFIG, type Config } from "../extension/config.ts";
-import { MODE_TRIGGER_CUSTOM_TYPE } from "../extension/tool-gating-replay.ts";
+import {
+  MODE_MESSAGE_CUSTOM_TYPE,
+  MODE_TRIGGER_CUSTOM_TYPE,
+} from "../extension/tool-gating-replay.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const CWD = "C:/proj";
@@ -225,7 +228,7 @@ test("session_start replays a prior mode and injects the current no-mode state",
     branch: [
       {
         type: "custom_message",
-        customType: "pi-tools-switch-mode",
+        customType: MODE_MESSAGE_CUSTOM_TYPE,
         details: { modeName: "plan" },
       },
     ],
@@ -268,7 +271,7 @@ test("session_tree replays the newly active branch before the next injection", a
         { type: "custom", customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: "plan" } },
         {
           type: "custom_message",
-          customType: "pi-tools-switch-mode",
+          customType: MODE_MESSAGE_CUSTOM_TYPE,
           details: { modeName: null },
         },
       ],
@@ -286,7 +289,7 @@ test("entering a mode injects the mode-state message without changing active too
   await emit("input", { text: "/plan-mode draw a plan" });
   const msg = injected(await emit("before_agent_start"));
   assert.ok(msg, "expected a mode-state message when entering the mode");
-  assert.equal(msg!.customType, "pi-tools-switch-mode");
+  assert.equal(msg!.customType, MODE_MESSAGE_CUSTOM_TYPE);
   assert.match(msg!.content, /You are in plan mode/);
   assert.match(msg!.content, /Allowed tools: exit_mode/);
   assert.deepEqual(activeTools(), before);
@@ -668,7 +671,7 @@ test("session_start restores a persisted mode without a duplicate state message"
       { type: "custom", customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: "plan" } },
       {
         type: "custom_message",
-        customType: "pi-tools-switch-mode",
+        customType: MODE_MESSAGE_CUSTOM_TYPE,
         details: { modeName: "plan" },
       },
     ],

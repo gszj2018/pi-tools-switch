@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
+  MODE_MESSAGE_CUSTOM_TYPE,
   MODE_TRIGGER_CUSTOM_TYPE,
   replayLastReportedModeName,
   replayLastTriggeredModeName,
@@ -21,7 +22,7 @@ function createContext(getBranch: () => unknown[]): ExtensionContext {
 function modeMessage(details?: unknown): unknown {
   return {
     type: "custom_message",
-    customType: "pi-tools-switch-mode",
+    customType: MODE_MESSAGE_CUSTOM_TYPE,
     details,
   };
 }

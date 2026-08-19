@@ -101,6 +101,7 @@ function createMockPi(initialActiveTools: string[] = ["read", "external_tool"]) 
     registerTool(definition: { name: string }) {
       if (!allToolNames.includes(definition.name)) allToolNames.push(definition.name);
     },
+    registerEntryRenderer: () => {},
     getActiveTools: () => [...activeTools],
     setActiveTools(next: string[]) {
       activeTools = [...next];

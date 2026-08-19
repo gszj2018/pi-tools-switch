@@ -4,7 +4,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { replayLastReportedModeName } from "../extension/tool-gating-replay.ts";
+import {
+  MODE_TRIGGER_CUSTOM_TYPE,
+  replayLastReportedModeName,
+  replayLastTriggeredModeName,
+} from "../extension/tool-gating-replay.ts";
 
 function createContext(getBranch: () => unknown[]): ExtensionContext {
   return {
@@ -19,6 +23,14 @@ function modeMessage(details?: unknown): unknown {
     type: "custom_message",
     customType: "pi-tools-switch-mode",
     details,
+  };
+}
+
+function triggerEntry(data?: unknown): unknown {
+  return {
+    type: "custom",
+    customType: MODE_TRIGGER_CUSTOM_TYPE,
+    data,
   };
 }
 
@@ -93,6 +105,78 @@ test("replayLastReportedModeName returns an error when reading the active branch
   });
 
   assert.deepEqual(replayLastReportedModeName(ctx), {
+    modeName: null,
+    error: "session unavailable",
+  });
+});
+
+// --- Persisted trigger-entry replay ----------------------------------------
+
+test("replayLastTriggeredModeName returns undefined without a trigger entry", () => {
+  const ctx = createContext(() => []);
+
+  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: undefined });
+});
+
+test("replayLastTriggeredModeName restores an enabled mode name", () => {
+  const ctx = createContext(() => [triggerEntry({ modeName: "plan" })]);
+
+  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: "plan" });
+});
+
+test("replayLastTriggeredModeName restores an explicit persisted disabled state", () => {
+  const persistedEntry = JSON.parse(JSON.stringify(triggerEntry({ modeName: null })));
+  const ctx = createContext(() => [persistedEntry]);
+
+  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: undefined });
+});
+
+test("replayLastTriggeredModeName uses the latest matching trigger entry", () => {
+  const ctx = createContext(() => [
+    triggerEntry({ modeName: "plan" }),
+    { type: "custom", customType: "another-extension", data: { modeName: "ignored" } },
+    triggerEntry({ modeName: "review" }),
+  ]);
+
+  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: "review" });
+});
+
+test("replayLastTriggeredModeName ignores non-custom entries", () => {
+  const ctx = createContext(() => [
+    modeMessage({ modeName: "plan" }),
+    { type: "message", message: { role: "custom", customType: MODE_TRIGGER_CUSTOM_TYPE } },
+    triggerEntry({ modeName: "plan" }),
+  ]);
+
+  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: "plan" });
+});
+
+test("replayLastTriggeredModeName treats malformed trigger data as unknown", () => {
+  for (const data of [
+    undefined,
+    "modeName",
+    {},
+    { modeName: undefined },
+    { modeName: 42 },
+    { modeName: false },
+  ]) {
+    const ctx = createContext(() => [triggerEntry(data)]);
+    assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: null });
+  }
+});
+
+test("replayLastTriggeredModeName leaves configured-mode validation to its caller", () => {
+  const ctx = createContext(() => [triggerEntry({ modeName: "removed" })]);
+
+  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: "removed" });
+});
+
+test("replayLastTriggeredModeName returns an error when reading the active branch fails", () => {
+  const ctx = createContext(() => {
+    throw new Error("session unavailable");
+  });
+
+  assert.deepEqual(replayLastTriggeredModeName(ctx), {
     modeName: null,
     error: "session unavailable",
   });

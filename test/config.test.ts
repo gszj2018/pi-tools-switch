@@ -26,12 +26,11 @@ function assertErrors(result: ConfigLoadResult, expected: string[]): void {
   }
 }
 
-/** Field-level assertion for a fully defaulted config (defaultPreset key may be undefined). */
+/** Field-level assertion for a fully defaulted config. */
 function assertDefaultConfig(config: Config): void {
   assert.deepEqual(config.presets, {});
   assert.deepEqual(config.subagentEnvVars, []);
   assert.deepEqual(config.gatingModes, {});
-  assert.equal(config.defaultPreset, undefined);
   // Empty here: the built-in exit trigger (defined in tool-gating.ts) applies
   // when the config provides none.
   assert.deepEqual(config.gatingExitTrigger, []);
@@ -50,7 +49,6 @@ test("normalizeConfig({}) returns defaults with no errors", () => {
   assert.deepEqual(r.config.presets, {});
   assert.deepEqual(r.config.subagentEnvVars, []);
   assert.deepEqual(r.config.gatingModes, {});
-  assert.equal(r.config.defaultPreset, undefined);
   assert.deepEqual(r.config.gatingExitTrigger, []);
   assert.deepEqual(r.errors, []);
 });
@@ -64,7 +62,6 @@ test("normalizeConfig(non-object) reports an error and returns defaults", () => 
 test("normalizeConfig(valid example) normalizes and stays clean", () => {
   const r = normalizeConfig({
     presets: { "my-preset": ["read", "grep"] },
-    defaultPreset: "my-preset",
     subagentEnvVars: ["PI_SUBAGENT"],
     gatingModes: {
       "plan-mode": {
@@ -77,7 +74,6 @@ test("normalizeConfig(valid example) normalizes and stays clean", () => {
   });
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.config.presets["my-preset"], ["read", "grep"]);
-  assert.equal(r.config.defaultPreset, "my-preset");
   assert.deepEqual(r.config.subagentEnvVars, ["PI_SUBAGENT"]);
   assert.deepEqual(r.config.gatingModes["plan-mode"], {
     trigger: ["/skill:plan-mode", "PLAN:"],
@@ -104,12 +100,6 @@ test("normalizeConfig drops invalid preset entries and dedupes tools", () => {
     'presets["UPPER"]: invalid preset name (must match [a-z][a-z0-9_-]*)',
     'presets["notarray"]: expected an array of tool names, got string',
   ]);
-});
-
-test("normalizeConfig rejects invalid defaultPreset", () => {
-  const r = normalizeConfig({ defaultPreset: "Bad_Name" });
-  assert.equal(r.config.defaultPreset, undefined);
-  assertErrors(r, ["defaultPreset: must be a string matching [a-z][a-z0-9_-]*"]);
 });
 
 test("normalizeConfig validates subagentEnvVars", () => {
@@ -229,23 +219,6 @@ test("loadConfigFrom treats 0-byte and whitespace-only files as missing", async 
     const r2 = await loadConfigFrom(dir);
     assertDefaultConfig(r2.config);
     assert.equal((await readFile(join(dir, CONFIG_FILE_NAME), "utf8")).trim(), "{}");
-  } finally {
-    await cleanupTempDir(dir);
-  }
-});
-
-test("loadConfigFrom parses a valid file and surfaces config errors", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "tsw-test-"));
-  try {
-    await writeFile(join(dir, CONFIG_FILE_NAME), JSON.stringify({ defaultPreset: "read" }));
-    const r = await loadConfigFrom(dir);
-    assert.equal(r.config.defaultPreset, "read");
-    assert.deepEqual(r.errors, []);
-
-    await writeFile(join(dir, CONFIG_FILE_NAME), JSON.stringify({ defaultPreset: 123 }));
-    const r2 = await loadConfigFrom(dir);
-    assert.equal(r2.config.defaultPreset, undefined);
-    assertErrors(r2, ["defaultPreset: must be a string matching [a-z][a-z0-9_-]*"]);
   } finally {
     await cleanupTempDir(dir);
   }

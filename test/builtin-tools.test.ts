@@ -5,8 +5,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   builtinToolCompletions,
-  getEffectiveDefaultPreset,
-  mergePresets,
   toggleBuiltinTools,
   validateBuiltinTools,
 } from "../extension/builtin-tools.ts";
@@ -100,31 +98,4 @@ test("builtinToolCompletions accumulates multiple tool arguments", () => {
 test("builtinToolCompletions rejects invalid completed tokens and stops when exhausted", () => {
   assert.equal(builtinToolCompletions("readx write "), null);
   assert.equal(builtinToolCompletions("read write edit bash find grep ls "), null);
-});
-
-test("getEffectiveDefaultPreset returns the preset only when effective", () => {
-  const presets = mergePresets({ explore: ["read", "find", "grep", "ls"] });
-  assert.deepEqual(getEffectiveDefaultPreset("explore", presets), {
-    preset: "explore",
-    configured: "explore",
-    invalid: false,
-  });
-  // Not configured.
-  assert.deepEqual(getEffectiveDefaultPreset(undefined, presets), {
-    preset: undefined,
-    configured: undefined,
-    invalid: false,
-  });
-  // Configured but the preset does not exist -> invalid.
-  assert.deepEqual(getEffectiveDefaultPreset("nope", presets), {
-    preset: undefined,
-    configured: "nope",
-    invalid: true,
-  });
-  // Built-in preset works too.
-  assert.deepEqual(getEffectiveDefaultPreset("read", presets), {
-    preset: "read",
-    configured: "read",
-    invalid: false,
-  });
 });

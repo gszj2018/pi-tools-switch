@@ -27,8 +27,6 @@ export interface GatingModeConfig {
 export interface Config {
   /** User-defined presets. Names matching built-in presets override them. */
   presets: Record<string, string[]>;
-  /** Preset to activate automatically at session start (optional). */
-  defaultPreset?: string;
   /** Additional env vars that mark a subagent context. */
   subagentEnvVars: string[];
   /** User-defined gating modes. Names matching built-in modes override them. */
@@ -194,21 +192,10 @@ export function normalizeConfig(data: unknown): ConfigLoadResult {
   }
 
   const errors: string[] = [];
-  const defaultPreset = data.defaultPreset;
-  if (
-    defaultPreset !== undefined &&
-    (typeof defaultPreset !== "string" || !isValidPresetName(defaultPreset))
-  ) {
-    errors.push(`defaultPreset: must be a string matching [a-z][a-z0-9_-]*`);
-  }
 
   return {
     config: deepFreeze({
       presets: normalizePresets(data.presets, errors),
-      defaultPreset:
-        typeof defaultPreset === "string" && isValidPresetName(defaultPreset)
-          ? defaultPreset
-          : undefined,
       subagentEnvVars: toStringArray(data.subagentEnvVars, errors, "subagentEnvVars"),
       gatingModes: normalizeGatingModes(data.gatingModes, errors),
       gatingExitTrigger: normalizeExitTrigger(data.gatingExitTrigger, errors),

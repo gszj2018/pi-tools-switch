@@ -1,11 +1,10 @@
 /**
- * Unit tests for built-in tool and default-preset status bar rendering.
+ * Unit tests for built-in tool status bar rendering.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   computeStatusBar,
-  formatDefaultStatus,
   formatPresetLine,
   formatToolsStatus,
 } from "../extension/builtin-tools.ts";
@@ -48,9 +47,4 @@ test("formatToolsStatus marks on/off and built-in kind", () => {
   ];
   const text = formatToolsStatus(["read"], all);
   assert.equal(text, "[+] read (built-in)\n[ ] bash (built-in)\n[ ] my_custom_tool");
-});
-
-test("formatDefaultStatus renders active and inactive", () => {
-  assert.equal(formatDefaultStatus(undefined), "[D: -]");
-  assert.equal(formatDefaultStatus("explore"), "[D: explore]");
 });

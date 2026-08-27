@@ -1,6 +1,6 @@
 /**
  * Built-in tools management for pi-tools-switch: tool on/off state, status
- * bar, commands, presets, and default-preset auto-activation at session start.
+ * bar, commands, and presets.
  *
  * Module-local state only: reads tool state via pi.getActiveTools() and owns
  * the "pi-tools-switch-status" status bar. No shared mutable state.
@@ -106,41 +106,6 @@ export function formatPresetLine(name: string, tools: readonly string[]): string
   return `${computeStatusBar(tools)} ${name}`;
 }
 
-/** Status bar text for the active default preset: [D: <name>] or [D: -]. */
-export function formatDefaultStatus(name: string | undefined): string {
-  return `[D: ${name ?? "-"}]`;
-}
-
-/** Resolution of the configured default preset. */
-export interface EffectiveDefaultPreset {
-  /** Effective preset name, or undefined when not effective. */
-  preset: string | undefined;
-  /** The configured defaultPreset value (undefined when not configured). */
-  configured: string | undefined;
-  /** True when defaultPreset was configured but does not exist (invalid). */
-  invalid: boolean;
-}
-
-/**
- * Resolve the effective default preset from the (already merged) presets: not
- * effective when no defaultPreset is configured or when the configured preset
- * does not exist. Subagents are excluded at the factory layer (index.ts skips
- * registering this module for subagents), so no subagent branch is needed
- * here. Runs once at the factory layer; the result is stable for the process.
- */
-export function getEffectiveDefaultPreset(
-  defaultPreset: string | undefined,
-  presets: Record<string, readonly string[]>,
-): EffectiveDefaultPreset {
-  if (defaultPreset === undefined) {
-    return { preset: undefined, configured: undefined, invalid: false };
-  }
-  if (presets[defaultPreset]) {
-    return { preset: defaultPreset, configured: defaultPreset, invalid: false };
-  }
-  return { preset: undefined, configured: defaultPreset, invalid: true };
-}
-
 /** Text block listing all tools with their on/off state. */
 export function formatToolsStatus(
   activeTools: readonly string[],
@@ -208,19 +173,9 @@ function presetNameCompletions(
 export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   // Config-derived state cached once at load time (rebuilt on extension reload).
   const presets = mergePresets(getConfig().presets);
-  // Configured default preset resolved once at the factory layer. It is the
-  // immutable baseline for each new session; index.ts never registers this
-  // module for subagents.
-  const effectiveDefault = getEffectiveDefaultPreset(getConfig().defaultPreset, presets);
-  // This runtime value starts from the configured default, but a successful
-  // preset-apply command may change it for the current session only.
-  let currentEffectiveDefaultPreset = effectiveDefault.preset;
 
   const refreshStatus = (ctx: ExtensionContext): void => {
-    ctx.ui.setStatus(
-      STATUS_BAR_KEY,
-      `${computeStatusBar(pi.getActiveTools())} ${formatDefaultStatus(currentEffectiveDefaultPreset)}`,
-    );
+    ctx.ui.setStatus(STATUS_BAR_KEY, computeStatusBar(pi.getActiveTools()));
   };
 
   const applyPresetByName = (name: string): { next: string[]; ok: boolean; error?: string } => {
@@ -279,27 +234,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   registerToolToggleCommand(true);
   registerToolToggleCommand(false);
 
-  pi.registerCommand("ptsw-builtin-reset", {
-    description: "Restore the effective default preset",
-    handler: async (args, ctx) => {
-      if (rejectUnexpectedArgs(args, "/ptsw-builtin-reset", ctx)) return;
-      if (!currentEffectiveDefaultPreset) {
-        ctx.ui.notify("No default preset configured", "warning");
-        return;
-      }
-      const result = applyPresetByName(currentEffectiveDefaultPreset);
-      if (!result.ok) {
-        ctx.ui.notify(result.error ?? "Unknown preset", "error");
-        return;
-      }
-      refreshStatus(ctx);
-      ctx.ui.notify(
-        `Restored preset "${currentEffectiveDefaultPreset}" (${computeStatusBar(result.next)})`,
-        "info",
-      );
-    },
-  });
-
   pi.registerCommand("ptsw-preset-list", {
     description: "List all tool presets",
     handler: async (args, ctx) => {
@@ -330,25 +264,12 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
         ctx.ui.notify(result.error ?? "Unknown preset", "error");
         return;
       }
-      currentEffectiveDefaultPreset = name;
       refreshStatus(ctx);
       ctx.ui.notify(`Preset "${name}" applied. Status: ${computeStatusBar(result.next)}`, "info");
     },
   });
 
-  pi.on("session_start", async (_event, ctx) => {
-    currentEffectiveDefaultPreset = effectiveDefault.preset;
-    if (currentEffectiveDefaultPreset) {
-      const result = applyPresetByName(currentEffectiveDefaultPreset);
-      if (!result.ok) {
-        ctx.ui.notify(result.error ?? "Unknown preset", "error");
-      }
-    } else if (effectiveDefault.invalid) {
-      // Configured default preset does not exist.
-      ctx.ui.notify(`Unknown preset: ${effectiveDefault.configured}`, "error");
-    }
-    refreshStatus(ctx);
-  });
+  pi.on("session_start", async (_event, ctx) => refreshStatus(ctx));
 
   pi.on("turn_start", async (_event, ctx) => refreshStatus(ctx));
   pi.on("agent_settled", async (_event, ctx) => refreshStatus(ctx));

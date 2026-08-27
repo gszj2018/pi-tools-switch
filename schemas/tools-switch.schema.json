@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://pi.dev/schemas/tools-switch.json",
   "title": "pi-tools-switch configuration",
-  "description": "Configuration for the pi-tools-switch extension: user-defined presets, default preset, subagent environment variables, custom gating modes, and the gating exit trigger. Loaded from <agentDir>/tools-switch.json.",
+  "description": "Configuration for the pi-tools-switch extension: user-defined presets, subagent environment variables, custom gating modes, and the gating exit trigger. Loaded from <agentDir>/tools-switch.json.",
   "type": "object",
   "properties": {
     "presets": {
@@ -24,17 +24,12 @@
         }
       }
     },
-    "defaultPreset": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]*$",
-      "description": "Name of the preset to activate automatically at session start. Skipped when running inside a subagent."
-    },
     "subagentEnvVars": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Additional environment variable names that mark a subagent context. Default preset activation is skipped when any of these (or any built-in subagent env var) is present in the environment."
+      "description": "Additional environment variable names that mark a subagent context."
     },
     "gatingModes": {
       "type": "object",

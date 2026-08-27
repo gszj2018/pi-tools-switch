@@ -7,7 +7,7 @@
   "properties": {
     "presets": {
       "type": "object",
-      "description": "User-defined tool presets. Keys are preset names matching [a-z][a-z0-9_-]*; values are lists of built-in tool names. Presets with the same name override built-in presets.",
+      "description": "User-defined tool presets. Keys are preset names matching [a-z][a-z0-9_-]*; values are lists of managed built-in tool names, including powershell. Presets with the same name override built-in presets.",
       "additionalProperties": {
         "type": "array",
         "items": {
@@ -17,6 +17,7 @@
             "write",
             "edit",
             "bash",
+            "powershell",
             "find",
             "grep",
             "ls"

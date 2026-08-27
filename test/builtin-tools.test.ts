@@ -12,8 +12,8 @@ import {
 test("toggleBuiltinTools enables and disables a single built-in tool", () => {
   assert.deepEqual(toggleBuiltinTools([], ["read"], true), ["read"]);
   assert.deepEqual(toggleBuiltinTools(["read"], ["read"], true), ["read"]);
-  assert.deepEqual(toggleBuiltinTools(["read", "bash"], ["read"], false), ["bash"]);
-  assert.deepEqual(toggleBuiltinTools(["read"], ["bash"], false), ["read"]);
+  assert.deepEqual(toggleBuiltinTools(["read", "powershell"], ["read"], false), ["powershell"]);
+  assert.deepEqual(toggleBuiltinTools(["read"], ["powershell"], false), ["read"]);
 });
 
 test("toggleBuiltinTools preserves external tools", () => {
@@ -37,9 +37,9 @@ test("toggleBuiltinTools dedupes repeated tools and keeps external tools", () =>
 });
 
 test("validateBuiltinTools accepts only valid lists", () => {
-  const ok = validateBuiltinTools(["read", "bash", "grep"]);
+  const ok = validateBuiltinTools(["read", "bash", "powershell", "grep"]);
   assert.equal(ok.ok, true);
-  assert.deepEqual(ok.tools, ["read", "bash", "grep"]);
+  assert.deepEqual(ok.tools, ["read", "bash", "powershell", "grep"]);
   assert.deepEqual(ok.invalid, []);
 });
 
@@ -65,6 +65,7 @@ test("builtinToolCompletions suggests built-in tools for empty and partial prefi
     "write",
     "edit",
     "bash",
+    "powershell",
     "find",
     "grep",
     "ls",
@@ -77,7 +78,7 @@ test("builtinToolCompletions requires trailing space before appending tools", ()
   assert.deepEqual(builtinToolCompletions("read"), [{ value: "read", label: "read" }]);
 
   const append = builtinToolCompletions("read ");
-  assert.equal(append?.length, 6);
+  assert.equal(append?.length, 7);
   assert.ok(!append?.some((item) => item.label === "read"));
   assert.deepEqual(append?.[0], { value: "read write", label: "write" });
 });
@@ -97,5 +98,5 @@ test("builtinToolCompletions accumulates multiple tool arguments", () => {
 
 test("builtinToolCompletions rejects invalid completed tokens and stops when exhausted", () => {
   assert.equal(builtinToolCompletions("readx write "), null);
-  assert.equal(builtinToolCompletions("read write edit bash find grep ls "), null);
+  assert.equal(builtinToolCompletions("read write edit bash powershell find grep ls "), null);
 });

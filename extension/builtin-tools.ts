@@ -24,6 +24,7 @@ const STATUS_CHARS: Record<BuiltinToolName, string> = {
   write: "W",
   edit: "E",
   bash: "B",
+  powershell: "P",
   find: "F",
   grep: "G",
   ls: "L",
@@ -34,7 +35,7 @@ export const BUILTIN_PRESETS: Record<string, readonly string[]> = {
   read: ["read"],
   explore: ["read", "find", "grep", "ls"],
   default: ["read", "write", "edit", "bash"],
-  full: [...BUILTIN_TOOL_NAMES],
+  full: ["read", "write", "edit", "bash", "find", "grep", "ls"],
 };
 
 /** Merge built-in presets with user presets (user wins on name collision). */
@@ -42,7 +43,7 @@ export function mergePresets(userPresets: Record<string, string[]>): Record<stri
   return { ...BUILTIN_PRESETS, ...userPresets };
 }
 
-/** Status bar text: [RWEBFGL], '-' for disabled built-in tools. */
+/** Status bar text: [RWEBPFGL], '-' for disabled built-in tools. */
 export function computeStatusBar(activeTools: Iterable<string>): string {
   const active = new Set(activeTools);
   return (
@@ -101,7 +102,7 @@ export function toggleBuiltinTools(
   return [...next];
 }
 
-/** One line for the preset list: `[R---FGL] name` (shorthand first for alignment). */
+/** One line for the preset list: `[R----FGL] name` (shorthand first for alignment). */
 export function formatPresetLine(name: string, tools: readonly string[]): string {
   return `${computeStatusBar(tools)} ${name}`;
 }

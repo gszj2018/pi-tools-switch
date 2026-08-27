@@ -440,9 +440,11 @@ test("tool calls are gated while the mode is active", async () => {
   await emit("session_start");
   await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
-  const gated = blocked(await emit("tool_call", { toolName: "bash", input: { command: "x" } }));
-  assert.ok(gated, "bash should be blocked in plan mode");
-  assert.match(gated!.reason ?? "", /In plan mode/);
+  for (const toolName of ["bash", "powershell"]) {
+    const gated = blocked(await emit("tool_call", { toolName, input: { command: "echo x" } }));
+    assert.ok(gated, `${toolName} should be blocked in plan mode`);
+    assert.match(gated!.reason ?? "", /In plan mode/);
+  }
   const readAllowed = await emit("tool_call", { toolName: "read", input: {} });
   assert.equal(readAllowed, undefined, "read should pass through");
   const exitAllowed = await emit("tool_call", {
@@ -450,6 +452,22 @@ test("tool calls are gated while the mode is active", async () => {
     input: { mode: "plan", summary: "done" },
   });
   assert.equal(exitAllowed, undefined, "exit_mode should pass through the gate");
+});
+
+test("tools explicitly included in allowTools are allowed", async () => {
+  const { emit } = setup({
+    ...DEFAULT_CONFIG,
+    gatingModes: {
+      shell: { trigger: ["SHELL:"], allowTools: ["bash", "powershell"], allowWriteDir: [] },
+    },
+  });
+  await emit("session_start");
+  await emit("input", { text: "SHELL:" });
+  await emit("before_agent_start");
+  for (const toolName of ["bash", "powershell"]) {
+    const allowed = await emit("tool_call", { toolName, input: { command: "echo x" } });
+    assert.equal(allowed, undefined, `${toolName} should pass when explicitly allowed`);
+  }
 });
 
 test("write is allowed inside allowWriteDir and blocked outside", async () => {

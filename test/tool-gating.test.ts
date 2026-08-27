@@ -95,8 +95,10 @@ test("matchAnyTrigger matches any non-empty trigger prefix", () => {
 });
 
 test("decideToolCall allows everything when no mode is active", () => {
-  const d = decideToolCall("bash", { command: "rm -rf /" }, undefined, undefined, CWD);
-  assert.deepEqual(d, { allowed: true });
+  for (const tool of ["bash", "powershell"]) {
+    const d = decideToolCall(tool, { command: "echo hi" }, undefined, undefined, CWD);
+    assert.deepEqual(d, { allowed: true }, `${tool} should be allowed without an active mode`);
+  }
 });
 
 test("decideToolCall allows exit_mode", () => {
@@ -118,9 +120,11 @@ test("decideToolCall allows read-only tools", () => {
 });
 
 test("decideToolCall allows allowTools entries", () => {
-  const mode = { ...BUILTIN_PLAN, allowTools: ["bash"] };
-  const d = decideToolCall("bash", { command: "echo hi" }, "plan", mode, CWD);
-  assert.deepEqual(d, { allowed: true });
+  for (const tool of ["bash", "powershell"]) {
+    const mode = { ...BUILTIN_PLAN, allowTools: [tool] };
+    const d = decideToolCall(tool, { command: "echo hi" }, "plan", mode, CWD);
+    assert.deepEqual(d, { allowed: true }, `${tool} should be allowed by allowTools`);
+  }
 });
 
 test("decideToolCall allows write/edit inside allowWriteDir", () => {
@@ -168,8 +172,8 @@ test("decideToolCall allows write when allowTools includes it (bypasses dir chec
   assert.deepEqual(d, { allowed: true });
 });
 
-test("decideToolCall blocks other tools (bash, external) with reason", () => {
-  for (const tool of ["bash", "my_custom_tool"]) {
+test("decideToolCall blocks other tools (bash, powershell, external) with reason", () => {
+  for (const tool of ["bash", "powershell", "my_custom_tool"]) {
     const d = decideToolCall(tool, {}, "plan", BUILTIN_PLAN, CWD);
     assert.equal(d.allowed, false, `${tool} should be blocked`);
     assert.ok(

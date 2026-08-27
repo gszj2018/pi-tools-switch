@@ -61,7 +61,7 @@ test("normalizeConfig(non-object) reports an error and returns defaults", () => 
 
 test("normalizeConfig(valid example) normalizes and stays clean", () => {
   const r = normalizeConfig({
-    presets: { "my-preset": ["read", "grep"] },
+    presets: { "my-preset": ["read", "powershell", "grep"] },
     subagentEnvVars: ["PI_SUBAGENT"],
     gatingModes: {
       "plan-mode": {
@@ -73,7 +73,7 @@ test("normalizeConfig(valid example) normalizes and stays clean", () => {
     gatingExitTrigger: ["/skill:normal-mode", "EXIT:"],
   });
   assert.deepEqual(r.errors, []);
-  assert.deepEqual(r.config.presets["my-preset"], ["read", "grep"]);
+  assert.deepEqual(r.config.presets["my-preset"], ["read", "powershell", "grep"]);
   assert.deepEqual(r.config.subagentEnvVars, ["PI_SUBAGENT"]);
   assert.deepEqual(r.config.gatingModes["plan-mode"], {
     trigger: ["/skill:plan-mode", "PLAN:"],

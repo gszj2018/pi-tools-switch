@@ -78,6 +78,7 @@ function createMockPi(initialActiveTools: string[] = ["read", "external_tool"]) 
     "write",
     "edit",
     "bash",
+    "powershell",
     "find",
     "grep",
     "ls",
@@ -217,15 +218,16 @@ test("ptsw-builtin-status reports built-in and external tool state", async () =>
   assert.equal(notification.level, "info");
   assert.match(notification.message, /\[\+] read \(built-in\)/);
   assert.match(notification.message, /\[ ] write \(built-in\)/);
+  assert.match(notification.message, /\[ ] powershell \(built-in\)/);
   assert.match(notification.message, /\[\+] external_tool/);
 });
 
 test("builtin enable and disable support multiple tools and preserve external tools", async () => {
   // After session_start read, external_tool, and exit_mode are active. The
-  // test enables write/edit/bash, then disables read plus read-only helpers
-  // while preserving external tools and the enabled tools.
+  // test enables write/edit/bash/powershell, then disables powershell plus
+  // read-only helpers while preserving external tools and the enabled tools.
   const mock = await setup();
-  await mock.invoke("ptsw-builtin-enable", "write edit bash");
+  await mock.invoke("ptsw-builtin-enable", "write edit bash powershell");
   assert.deepEqual(mock.activeTools(), [
     "read",
     "external_tool",
@@ -233,10 +235,11 @@ test("builtin enable and disable support multiple tools and preserve external to
     "write",
     "edit",
     "bash",
+    "powershell",
   ]);
-  assert.match(lastNotification(mock.notifications).message, /Enabled write, edit, bash/);
+  assert.match(lastNotification(mock.notifications).message, /Enabled write, edit, bash, powershell/);
 
-  await mock.invoke("ptsw-builtin-disable", "read find grep ls");
+  await mock.invoke("ptsw-builtin-disable", "read powershell find grep ls");
   assert.deepEqual(mock.activeTools(), [
     "external_tool",
     "exit_mode",
@@ -244,7 +247,7 @@ test("builtin enable and disable support multiple tools and preserve external to
     "edit",
     "bash",
   ]);
-  assert.match(lastNotification(mock.notifications).message, /Disabled read, find, grep, ls/);
+  assert.match(lastNotification(mock.notifications).message, /Disabled read, powershell, find, grep, ls/);
   assert.ok(mock.statuses.some(({ key }) => key === "pi-tools-switch-status"));
 });
 
@@ -271,16 +274,16 @@ test("preset list and apply preserve listing, validation, and application behavi
   await mock.invoke("ptsw-preset-list");
   const list = lastNotification(mock.notifications);
   assert.equal(list.level, "info");
-  assert.match(list.message, /\[R------] read/);
-  assert.match(list.message, /\[R----G-] custom/);
+  assert.match(list.message, /\[R-------] read/);
+  assert.match(list.message, /\[R-----G-] custom/);
 
-  mock.setActiveTools(["bash", "external_tool"]);
+  mock.setActiveTools(["bash", "powershell", "external_tool"]);
   await mock.invoke("ptsw-preset-apply", "custom");
   assert.deepEqual(mock.activeTools(), ["external_tool", "read", "grep"]);
   assert.match(lastNotification(mock.notifications).message, /Preset "custom" applied/);
   assert.deepEqual(mock.statuses.at(-1), {
     key: "pi-tools-switch-status",
-    value: "[R----G-]",
+    value: "[R-----G-]",
   });
 
   const applied = mock.activeTools();
@@ -313,7 +316,7 @@ test("preset apply does not mutate config or reset on a later session start", as
     mock.statuses.filter(({ key }) => key === "pi-tools-switch-status").at(-1),
     {
       key: "pi-tools-switch-status",
-      value: "[R----G-]",
+      value: "[R-----G-]",
     },
   );
 });

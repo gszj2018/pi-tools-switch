@@ -14,6 +14,9 @@ test("BUILTIN_PRESETS match the documented presets", () => {
   assert.deepEqual(BUILTIN_PRESETS["explore"], ["read", "find", "grep", "ls"]);
   assert.deepEqual(BUILTIN_PRESETS["default"], ["read", "write", "edit", "bash"]);
   assert.deepEqual(BUILTIN_PRESETS["full"], ["read", "write", "edit", "bash", "find", "grep", "ls"]);
+  for (const tools of Object.values(BUILTIN_PRESETS)) {
+    assert.ok(!tools.includes("powershell"));
+  }
 });
 
 test("mergePresets keeps built-ins and adds user presets", () => {
@@ -40,8 +43,8 @@ test("applyPreset replaces built-in tools while keeping external tools", () => {
   assert.deepEqual(next, ["my_custom_tool", "read", "find", "grep", "ls"]);
 });
 
-test("applyPreset removes built-ins not in the preset", () => {
-  const active = ["read", "write", "edit", "bash", "find", "grep", "ls"];
+test("applyPreset removes managed built-ins not in the preset", () => {
+  const active = ["read", "write", "edit", "bash", "powershell", "find", "grep", "ls"];
   const next = applyPreset(active, ["read"]);
   assert.deepEqual(next, ["read"]);
 });

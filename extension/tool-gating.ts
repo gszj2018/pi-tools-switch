@@ -317,41 +317,28 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
           );
         }
 
-        const acceptAndExit = (): {
+        const accept = (closing: boolean): {
           content: { type: "text"; text: string }[];
           details: Record<string, unknown>;
           terminate: true;
         } => {
           ctx.ui.notify(params.summary, "info");
-          triggerMode(undefined, ctx);
+          if (closing) triggerMode(undefined, ctx);
+          const text = closing
+            ? `The user has accepted. Exiting ${modeName} mode now.`
+            : `The user has accepted. You are still in ${modeName} mode.`;
           return {
-            content: [
-              { type: "text", text: `The user has accepted. Exiting ${modeName} mode now.` },
-            ],
+            content: [{ type: "text", text }],
             details: { summary: params.summary },
             terminate: true,
           };
         };
-        const acceptAndStay = (): {
-          content: { type: "text"; text: string }[];
-          details: Record<string, unknown>;
-          terminate: true;
-        } => {
-          ctx.ui.notify(params.summary, "info");
-          return {
-            content: [
-              { type: "text", text: `The user has accepted. You are still in ${modeName} mode.` },
-            ],
-            details: { summary: params.summary },
-            terminate: true,
-          };
-        };
-        if (!ctx.hasUI) return acceptAndExit();
+        if (!ctx.hasUI) return accept(true);
         const choice = await ctx.ui.select(
           `${modeName} mode: accept and exit, accept and stay, or refine?\n${params.summary}`,
           ["Accept and exit mode", "Accept and stay in mode", "Refine"],
         );
-        if (choice === "Accept and stay in mode") return acceptAndStay();
+        if (choice === "Accept and stay in mode") return accept(false);
         if (choice === "Refine") {
           const refinement = (await ctx.ui.input("Refinement:", ""))?.trim() ?? "";
           const hint = refinement ? ` Refinement hint: ${refinement}` : "";
@@ -365,7 +352,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
             details: { summary: params.summary },
           };
         }
-        return acceptAndExit();
+        return accept(true);
       },
     });
   };

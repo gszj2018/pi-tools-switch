@@ -470,7 +470,7 @@ test("tools explicitly included in allowTools are allowed", async () => {
   }
 });
 
-test("write is allowed inside allowWriteDir and blocked outside", async () => {
+test("write allowWriteDir gating honors Pi @ paths and strict directory descendants", async () => {
   const { emit } = setup();
   await emit("session_start");
   await emit("input", { text: "/plan-mode" });
@@ -480,6 +480,15 @@ test("write is allowed inside allowWriteDir and blocked outside", async () => {
     input: { path: "C:/proj/.agents/plans/plan.md" },
   });
   assert.equal(inDir, undefined, "write inside allowWriteDir should pass");
+  const atPrefixedPath = await emit("tool_call", {
+    toolName: "write",
+    input: { path: "@.agents/plans/plan.md" },
+  });
+  assert.equal(atPrefixedPath, undefined, "write should strip one leading @ before gating");
+  const directoryPath = blocked(
+    await emit("tool_call", { toolName: "write", input: { path: "C:/proj/.agents/plans" } }),
+  );
+  assert.ok(directoryPath, "write path equal to allowWriteDir should be blocked");
   const outDir = blocked(
     await emit("tool_call", { toolName: "write", input: { path: "C:/proj/src/file.ts" } }),
   );

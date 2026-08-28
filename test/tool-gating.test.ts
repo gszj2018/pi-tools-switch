@@ -127,35 +127,72 @@ test("decideToolCall allows allowTools entries", () => {
   }
 });
 
-test("decideToolCall allows write/edit inside allowWriteDir", () => {
+test("decideToolCall allows write/edit strictly inside allowWriteDir", () => {
   for (const tool of ["write", "edit"]) {
-    const d = decideToolCall(
+    for (const path of [
+      "C:/proj/.agents/plans/plan.md",
+      "C:/proj/.agents/plans/nested/plan.md",
+    ]) {
+      const d = decideToolCall(tool, { path }, "plan", BUILTIN_PLAN, CWD);
+      assert.equal(d.allowed, true, `${tool} path ${path} inside allowWriteDir should be allowed`);
+    }
+  }
+});
+
+test("decideToolCall blocks write/edit paths equal to allowWriteDir", () => {
+  for (const tool of ["write", "edit"]) {
+    const d = decideToolCall(tool, { path: "C:/proj/.agents/plans" }, "plan", BUILTIN_PLAN, CWD);
+    assert.equal(d.allowed, false, `${tool} path equal to allowWriteDir should be blocked`);
+  }
+});
+
+test("decideToolCall strips one leading @ from write/edit paths only", () => {
+  for (const tool of ["write", "edit"]) {
+    const allowed = decideToolCall(
       tool,
-      { path: "C:/proj/.agents/plans/plan.md" },
+      { path: "@.agents/plans/plan.md" },
       "plan",
       BUILTIN_PLAN,
       CWD,
     );
-    assert.equal(d.allowed, true, `${tool} inside allowWriteDir should be allowed`);
+    assert.equal(allowed.allowed, true, `${tool} should strip one leading @ from its path`);
+
+    const blocked = decideToolCall(
+      tool,
+      { path: "@@.agents/plans/plan.md" },
+      "plan",
+      BUILTIN_PLAN,
+      CWD,
+    );
+    assert.equal(blocked.allowed, false, `${tool} should retain a second leading @ in its path`);
   }
+});
+
+test("decideToolCall does not strip a leading @ from allowWriteDir configuration", () => {
+  const mode = { trigger: ["X:"], allowTools: [], allowWriteDir: ["@.agents/plans"] };
+  const ordinaryPath = decideToolCall("write", { path: ".agents/plans/plan.md" }, "x", mode, CWD);
+  assert.equal(ordinaryPath.allowed, false);
+
+  const literalAtPath = decideToolCall("write", { path: "@@.agents/plans/plan.md" }, "x", mode, CWD);
+  assert.equal(literalAtPath.allowed, true);
 });
 
 test("decideToolCall blocks write/edit outside allowWriteDir with reason", () => {
   for (const tool of ["write", "edit"]) {
-    const d = decideToolCall(
-      tool,
-      { path: "C:/proj/src/file.ts" },
-      "plan",
-      BUILTIN_PLAN,
-      CWD,
-    );
-    assert.equal(d.allowed, false, `${tool} outside should be blocked`);
-    assert.ok(
-      d.reason?.includes("In plan mode, file modification is not allowed"),
-      `reason: ${d.reason}`,
-    );
-    assert.ok(d.reason?.includes("Except in the following directories"), `reason lists dirs: ${d.reason}`);
-    assert.ok(d.reason?.includes(ABS_PLANS_DIR), `reason has abs dir: ${d.reason}`);
+    for (const path of [
+      "C:/proj/src/file.ts",
+      // This is the immediate parent of allowWriteDir, so relative(plans, path) is exactly "..".
+      "C:/proj/.agents",
+    ]) {
+      const d = decideToolCall(tool, { path }, "plan", BUILTIN_PLAN, CWD);
+      assert.equal(d.allowed, false, `${tool} outside path ${path} should be blocked`);
+      assert.ok(
+        d.reason?.includes("In plan mode, file modification is not allowed"),
+        `reason: ${d.reason}`,
+      );
+      assert.ok(d.reason?.includes("Except in the following directories"), `reason lists dirs: ${d.reason}`);
+      assert.ok(d.reason?.includes(ABS_PLANS_DIR), `reason has abs dir: ${d.reason}`);
+    }
   }
 });
 

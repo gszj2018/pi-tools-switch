@@ -477,22 +477,65 @@ test("write allowWriteDir gating honors Pi @ paths and strict directory descenda
   await emit("before_agent_start");
   const inDir = await emit("tool_call", {
     toolName: "write",
-    input: { path: "C:/proj/.agents/plans/plan.md" },
+    input: { path: "C:/proj/.agents/plans/plan.md", content: "# Plan\n" },
   });
   assert.equal(inDir, undefined, "write inside allowWriteDir should pass");
   const atPrefixedPath = await emit("tool_call", {
     toolName: "write",
-    input: { path: "@.agents/plans/plan.md" },
+    input: { path: "@.agents/plans/plan.md", content: "# Plan\n" },
   });
   assert.equal(atPrefixedPath, undefined, "write should strip one leading @ before gating");
   const directoryPath = blocked(
-    await emit("tool_call", { toolName: "write", input: { path: "C:/proj/.agents/plans" } }),
+    await emit("tool_call", {
+      toolName: "write",
+      input: { path: "C:/proj/.agents/plans", content: "# Plan\n" },
+    }),
   );
   assert.ok(directoryPath, "write path equal to allowWriteDir should be blocked");
   const outDir = blocked(
-    await emit("tool_call", { toolName: "write", input: { path: "C:/proj/src/file.ts" } }),
+    await emit("tool_call", {
+      toolName: "write",
+      input: { path: "C:/proj/src/file.ts", content: "# Plan\n" },
+    }),
   );
   assert.ok(outDir, "write outside allowWriteDir should be blocked");
+});
+
+test("edit allowWriteDir gating honors Pi @ paths and strict directory descendants", async () => {
+  const { emit } = setup();
+  await emit("session_start");
+  await emit("input", { text: "/plan-mode" });
+  await emit("before_agent_start");
+  const inDir = await emit("tool_call", {
+    toolName: "edit",
+    input: {
+      path: "C:/proj/.agents/plans/plan.md",
+      edits: [{ oldText: "old", newText: "new" }],
+    },
+  });
+  assert.equal(inDir, undefined, "edit inside allowWriteDir should pass");
+  const atPrefixedPath = await emit("tool_call", {
+    toolName: "edit",
+    input: {
+      path: "@.agents/plans/plan.md",
+      edits: [{ oldText: "old", newText: "new" }],
+    },
+  });
+  assert.equal(atPrefixedPath, undefined, "edit should strip one leading @ before gating");
+  const directoryPath = blocked(
+    await emit("tool_call", {
+      toolName: "edit",
+      input: { path: "C:/proj/.agents/plans", edits: [{ oldText: "old", newText: "new" }] },
+    }),
+  );
+  assert.ok(directoryPath, "edit path equal to allowWriteDir should be blocked");
+  const outDir = blocked(
+    await emit("tool_call", {
+      toolName: "edit",
+      input: { path: "C:/proj/src/file.ts", edits: [{ oldText: "old", newText: "new" }] },
+    }),
+  );
+  assert.ok(outDir, "edit outside allowWriteDir should be blocked");
 });
 
 // --- D. exit_mode validation and execute responses --------------------------

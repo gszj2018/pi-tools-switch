@@ -44,6 +44,8 @@ const PATH_CASES = [
     tildeOutput: "C:\\Users\\test\\plans\\plan.md",
     fileUrl: "file:///D:/workspace/proj/.agents/plans/plan.md",
     fileUrlOutput: "D:\\workspace\\proj\\.agents\\plans\\plan.md",
+    allowedDir: "D:\\workspace\\proj\\.agents\\plans",
+    outsideFileUrl: "file:///D:/workspace/proj/README.md",
   },
   {
     name: "posix",
@@ -55,6 +57,8 @@ const PATH_CASES = [
     tildeOutput: "/home/test/plans/plan.md",
     fileUrl: "file:///workspace/proj/.agents/plans/plan.md",
     fileUrlOutput: "/workspace/proj/.agents/plans/plan.md",
+    allowedDir: "/workspace/proj/.agents/plans",
+    outsideFileUrl: "file:///workspace/proj/README.md",
   },
 ] as const;
 
@@ -78,6 +82,21 @@ test("Pi-compatible tool input rules apply on both win32 and posix platforms", (
   }
 });
 
+test("file URL paths are gated on both win32 and posix platforms", () => {
+  for (const pathCase of PATH_CASES) {
+    assert.equal(
+      isPathInDirsWithRuntime(pathCase.fileUrl, [pathCase.allowedDir], pathCase.cwd, pathCase.runtime),
+      true,
+      `${pathCase.name} allows a file URL below an allowed directory`,
+    );
+    assert.equal(
+      isPathInDirsWithRuntime(pathCase.outsideFileUrl, [pathCase.allowedDir], pathCase.cwd, pathCase.runtime),
+      false,
+      `${pathCase.name} rejects a file URL outside an allowed directory`,
+    );
+  }
+});
+
 test("Windows runtime converts supported Pi shell paths only", () => {
   assert.equal(normalizeWindowsShellPath("/c/Users/test/file.md", WINDOWS_RUNTIME), "C:\\Users\\test\\file.md");
   assert.equal(normalizeWindowsShellPath("/mnt/d/work/file.md", WINDOWS_RUNTIME), "D:\\work\\file.md");
@@ -89,6 +108,7 @@ test("Windows runtime converts supported Pi shell paths only", () => {
     resolveToolPath("@/mnt/d/work/plan.md", WINDOWS_CWD, WINDOWS_RUNTIME),
     "D:\\work\\plan.md",
   );
+  assert.equal(resolveToolPath("~\\", WINDOWS_CWD, WINDOWS_RUNTIME), "C:\\Users\\test");
   assert.equal(
     resolveToolPath("~\\plans\\plan.md", WINDOWS_CWD, WINDOWS_RUNTIME),
     "C:\\Users\\test\\plans\\plan.md",
@@ -187,6 +207,38 @@ test("allowWriteDir comparison is strict on both win32 and posix platforms", () 
       false,
       `${pathCase.name} rejects a file in another directory`,
     );
+  }
+});
+
+test("resolveDir resolves configuration paths on both win32 and posix platforms", () => {
+  const cases = [
+    {
+      name: "win32",
+      runtime: WINDOWS_RUNTIME,
+      cwd: WINDOWS_CWD,
+      homeDir: "C:\\Users\\test",
+      homeChild: "C:\\Users\\test\\plans",
+      relativePath: ".agents\\plans",
+      relativeOutput: "D:\\workspace\\proj\\.agents\\plans",
+      absolutePath: "D:\\workspace\\shared",
+    },
+    {
+      name: "posix",
+      runtime: POSIX_RUNTIME,
+      cwd: POSIX_CWD,
+      homeDir: "/home/test",
+      homeChild: "/home/test/plans",
+      relativePath: ".agents/plans",
+      relativeOutput: "/workspace/proj/.agents/plans",
+      absolutePath: "/workspace/shared",
+    },
+  ] as const;
+
+  for (const pathCase of cases) {
+    assert.equal(resolveDirWithRuntime("~", pathCase.cwd, pathCase.runtime), pathCase.homeDir);
+    assert.equal(resolveDirWithRuntime("~/plans", pathCase.cwd, pathCase.runtime), pathCase.homeChild);
+    assert.equal(resolveDirWithRuntime(pathCase.relativePath, pathCase.cwd, pathCase.runtime), pathCase.relativeOutput);
+    assert.equal(resolveDirWithRuntime(pathCase.absolutePath, pathCase.cwd, pathCase.runtime), pathCase.absolutePath);
   }
 });
 

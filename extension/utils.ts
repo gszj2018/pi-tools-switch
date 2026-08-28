@@ -72,5 +72,9 @@ export function resolveDir(spec: string, cwd: string): string {
  * directory, using Pi-compatible tool-input path handling.
  */
 export function isPathInDirs(target: string, allowedDirs: readonly string[], cwd: string): boolean {
-  return isPathInDirsWithRuntime(target, allowedDirs, cwd, DEFAULT_PATH_RUNTIME);
+  try {
+    return isPathInDirsWithRuntime(target, allowedDirs, cwd, DEFAULT_PATH_RUNTIME);
+  } catch {
+    return false;
+  }
 }

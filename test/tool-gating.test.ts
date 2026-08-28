@@ -3,6 +3,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as path from "node:path";
 import {
   BUILTIN_GATING_EXIT_TRIGGERS,
   BUILTIN_GATING_MODES,
@@ -19,7 +20,12 @@ import {
 } from "../extension/tool-gating.ts";
 import { resolveDir } from "../extension/utils.ts";
 
-const CWD = "C:/proj";
+const CWD = process.platform === "win32" ? "D:\\workspace\\proj" : "/workspace/proj";
+const PLANS_DIR = path.resolve(CWD, ".agents", "plans");
+const PLAN_FILE = path.join(PLANS_DIR, "plan.md");
+const NESTED_PLAN_FILE = path.join(PLANS_DIR, "nested", "plan.md");
+const OUTSIDE_FILE = path.resolve(CWD, "src", "file.ts");
+const PARENT_DIR = path.resolve(PLANS_DIR, "..");
 const ABS_PLANS_DIR = resolveDir(".agents/plans", CWD);
 const BUILTIN_PLAN = BUILTIN_GATING_MODES["plan"];
 
@@ -129,19 +135,16 @@ test("decideToolCall allows allowTools entries", () => {
 
 test("decideToolCall allows write/edit strictly inside allowWriteDir", () => {
   for (const tool of ["write", "edit"]) {
-    for (const path of [
-      "C:/proj/.agents/plans/plan.md",
-      "C:/proj/.agents/plans/nested/plan.md",
-    ]) {
-      const d = decideToolCall(tool, { path }, "plan", BUILTIN_PLAN, CWD);
-      assert.equal(d.allowed, true, `${tool} path ${path} inside allowWriteDir should be allowed`);
+    for (const targetPath of [PLAN_FILE, NESTED_PLAN_FILE]) {
+      const d = decideToolCall(tool, { path: targetPath }, "plan", BUILTIN_PLAN, CWD);
+      assert.equal(d.allowed, true, `${tool} path ${targetPath} inside allowWriteDir should be allowed`);
     }
   }
 });
 
 test("decideToolCall blocks write/edit paths equal to allowWriteDir", () => {
   for (const tool of ["write", "edit"]) {
-    const d = decideToolCall(tool, { path: "C:/proj/.agents/plans" }, "plan", BUILTIN_PLAN, CWD);
+    const d = decideToolCall(tool, { path: PLANS_DIR }, "plan", BUILTIN_PLAN, CWD);
     assert.equal(d.allowed, false, `${tool} path equal to allowWriteDir should be blocked`);
   }
 });
@@ -179,13 +182,13 @@ test("decideToolCall does not strip a leading @ from allowWriteDir configuration
 
 test("decideToolCall blocks write/edit outside allowWriteDir with reason", () => {
   for (const tool of ["write", "edit"]) {
-    for (const path of [
-      "C:/proj/src/file.ts",
+    for (const targetPath of [
+      OUTSIDE_FILE,
       // This is the immediate parent of allowWriteDir, so relative(plans, path) is exactly "..".
-      "C:/proj/.agents",
+      PARENT_DIR,
     ]) {
-      const d = decideToolCall(tool, { path }, "plan", BUILTIN_PLAN, CWD);
-      assert.equal(d.allowed, false, `${tool} outside path ${path} should be blocked`);
+      const d = decideToolCall(tool, { path: targetPath }, "plan", BUILTIN_PLAN, CWD);
+      assert.equal(d.allowed, false, `${tool} outside path ${targetPath} should be blocked`);
       assert.ok(
         d.reason?.includes("In plan mode, file modification is not allowed"),
         `reason: ${d.reason}`,
@@ -198,14 +201,14 @@ test("decideToolCall blocks write/edit outside allowWriteDir with reason", () =>
 
 test("decideToolCall blocks write/edit when allowWriteDir is empty (no dir suffix)", () => {
   const mode = { trigger: ["X:"], allowTools: [], allowWriteDir: [] };
-  const d = decideToolCall("write", { path: "C:/anything.md" }, "x", mode, CWD);
+  const d = decideToolCall("write", { path: path.resolve(CWD, "anything.md") }, "x", mode, CWD);
   assert.equal(d.allowed, false);
   assert.equal(d.reason, "In x mode, file modification is not allowed");
 });
 
 test("decideToolCall allows write when allowTools includes it (bypasses dir check)", () => {
   const mode = { ...BUILTIN_PLAN, allowTools: ["write"] };
-  const d = decideToolCall("write", { path: "C:/anywhere.md" }, "plan", mode, CWD);
+  const d = decideToolCall("write", { path: path.resolve(CWD, "anywhere.md") }, "plan", mode, CWD);
   assert.deepEqual(d, { allowed: true });
 });
 
@@ -252,6 +255,13 @@ test("decideToolCall blocks write with missing or non-string path", () => {
   assert.equal(d1.allowed, false);
   const d2 = decideToolCall("write", { path: 42 }, "plan", BUILTIN_PLAN, CWD);
   assert.equal(d2.allowed, false);
+});
+
+test("decideToolCall fails closed when write/edit path parsing throws", () => {
+  for (const tool of ["write", "edit"]) {
+    const decision = decideToolCall(tool, { path: "file:///%ZZ" }, "plan", BUILTIN_PLAN, CWD);
+    assert.equal(decision.allowed, false, `${tool} should be blocked`);
+  }
 });
 
 test("formatModeStatus renders matching and pending reported states", () => {

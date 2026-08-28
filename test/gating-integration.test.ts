@@ -9,6 +9,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as path from "node:path";
 import {
   EXIT_MODE_PROMPT_GUIDELINES,
   EXIT_MODE_PROMPT_SNIPPET,
@@ -23,7 +24,10 @@ import {
 } from "../extension/tool-gating-replay.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-const CWD = "C:/proj";
+const CWD = process.platform === "win32" ? "D:\\workspace\\proj" : "/workspace/proj";
+const PLANS_DIR = path.resolve(CWD, ".agents", "plans");
+const PLAN_FILE = path.join(PLANS_DIR, "plan.md");
+const OUTSIDE_FILE = path.resolve(CWD, "src", "file.ts");
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
 
@@ -477,7 +481,7 @@ test("write allowWriteDir gating honors Pi @ paths and strict directory descenda
   await emit("before_agent_start");
   const inDir = await emit("tool_call", {
     toolName: "write",
-    input: { path: "C:/proj/.agents/plans/plan.md", content: "# Plan\n" },
+    input: { path: PLAN_FILE, content: "# Plan\n" },
   });
   assert.equal(inDir, undefined, "write inside allowWriteDir should pass");
   const atPrefixedPath = await emit("tool_call", {
@@ -488,14 +492,14 @@ test("write allowWriteDir gating honors Pi @ paths and strict directory descenda
   const directoryPath = blocked(
     await emit("tool_call", {
       toolName: "write",
-      input: { path: "C:/proj/.agents/plans", content: "# Plan\n" },
+      input: { path: PLANS_DIR, content: "# Plan\n" },
     }),
   );
   assert.ok(directoryPath, "write path equal to allowWriteDir should be blocked");
   const outDir = blocked(
     await emit("tool_call", {
       toolName: "write",
-      input: { path: "C:/proj/src/file.ts", content: "# Plan\n" },
+      input: { path: OUTSIDE_FILE, content: "# Plan\n" },
     }),
   );
   assert.ok(outDir, "write outside allowWriteDir should be blocked");
@@ -509,7 +513,7 @@ test("edit allowWriteDir gating honors Pi @ paths and strict directory descendan
   const inDir = await emit("tool_call", {
     toolName: "edit",
     input: {
-      path: "C:/proj/.agents/plans/plan.md",
+      path: PLAN_FILE,
       edits: [{ oldText: "old", newText: "new" }],
     },
   });
@@ -525,14 +529,14 @@ test("edit allowWriteDir gating honors Pi @ paths and strict directory descendan
   const directoryPath = blocked(
     await emit("tool_call", {
       toolName: "edit",
-      input: { path: "C:/proj/.agents/plans", edits: [{ oldText: "old", newText: "new" }] },
+      input: { path: PLANS_DIR, edits: [{ oldText: "old", newText: "new" }] },
     }),
   );
   assert.ok(directoryPath, "edit path equal to allowWriteDir should be blocked");
   const outDir = blocked(
     await emit("tool_call", {
       toolName: "edit",
-      input: { path: "C:/proj/src/file.ts", edits: [{ oldText: "old", newText: "new" }] },
+      input: { path: OUTSIDE_FILE, edits: [{ oldText: "old", newText: "new" }] },
     }),
   );
   assert.ok(outDir, "edit outside allowWriteDir should be blocked");

@@ -86,17 +86,20 @@ export function resolveDir(spec: string, cwd: string): string {
 }
 
 /**
- * Return true when `target` (a file path) lies inside or exactly on one of the
- * allowed directories. Comparison uses POSIX-normalized absolute paths so it
- * works on Windows and POSIX alike.
+ * Return true when a write/edit `target` path lies strictly inside one of the
+ * allowed directories. The built-in write/edit tools strip one leading `@`
+ * from their path argument, so apply that rule only to `target`, not to
+ * configured directory specs. Comparison uses POSIX-normalized absolute paths
+ * so it works on Windows and POSIX alike.
  */
 export function isPathInDirs(target: string, allowedDirs: readonly string[], cwd: string): boolean {
   if (allowedDirs.length === 0) return false;
-  const targetAbs = toComparablePath(resolve(cwd, target));
+  const toolPath = target.startsWith("@") ? target.slice(1) : target;
+  const targetAbs = toComparablePath(resolve(cwd, toolPath));
   for (const spec of allowedDirs) {
     const dir = toComparablePath(resolveDir(spec, cwd));
     const rel = posix.relative(dir, targetAbs);
-    if (rel === "" || (rel !== ".." && !rel.startsWith("../"))) return true;
+    if (rel !== "" && rel !== ".." && !rel.startsWith("../")) return true;
   }
   return false;
 }

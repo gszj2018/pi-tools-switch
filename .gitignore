@@ -8,6 +8,7 @@ package-lock.json
 npm-debug.log*
 
 # Agents files (development-only, not part of the package deliverables)
+.pi/
 .agents/
 AGENTS.md
 

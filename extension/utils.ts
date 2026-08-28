@@ -3,7 +3,23 @@
  * validation, and cross-platform path handling.
  */
 import { homedir } from "node:os";
-import { isAbsolute, join, posix, resolve, sep } from "node:path";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  isPathInDirs as isPathInDirsWithRuntime,
+  resolveDir as resolveDirWithRuntime,
+  type PathRuntime,
+} from "./utils-path.ts";
+
+const DEFAULT_PATH_RUNTIME: PathRuntime = {
+  platform: process.platform,
+  isAbsolute: path.isAbsolute,
+  join: path.join,
+  relative: path.relative,
+  resolve: path.resolve,
+  fileURLToPath,
+  homeDir: homedir(),
+};
 
 /** The 8 built-in tools managed by this extension, in status display order. */
 export type BuiltinToolName =
@@ -46,60 +62,15 @@ export function isValidPresetName(name: string): boolean {
   return PRESET_NAME_RE.test(name);
 }
 
-/** Normalize a path to POSIX separators for cross-platform comparison. */
-function toPosixPath(path: string): string {
-  return path.split(sep).join("/");
-}
-
-const IS_WINDOWS = process.platform === "win32";
-
-/** Uppercase the drive letter of a Windows-style absolute path ("c:/..." -> "C:/..."). */
-function normalizeDriveLetter(path: string): string {
-  const match = /^([A-Za-z])(:)(\/|$)/.exec(path);
-  if (!match) return path;
-  return match[1].toUpperCase() + match[2] + match[3] + path.slice(match[0].length);
-}
-
-/**
- * Normalize a path for comparison: POSIX separators, plus uppercase the drive
- * letter on Windows (the most common case mismatch). Directory/file names are
- * left untouched: callers should keep them consistent with cwd/config casing.
- */
-function toComparablePath(path: string): string {
-  const normalized = toPosixPath(path);
-  return IS_WINDOWS ? normalizeDriveLetter(normalized) : normalized;
-}
-
-/**
- * Resolve a user-supplied directory spec to an absolute path:
- * `~`/`~/...` expands to the home directory, other relative specs resolve
- * against cwd; absolute specs are returned unchanged.
- */
+/** Resolve an allowWriteDir configuration entry with the production path runtime. */
 export function resolveDir(spec: string, cwd: string): string {
-  let expanded = spec;
-  if (expanded === "~") {
-    expanded = homedir();
-  } else if (expanded.startsWith("~/") || expanded.startsWith("~\\")) {
-    expanded = join(homedir(), expanded.slice(2));
-  }
-  return isAbsolute(expanded) ? expanded : resolve(cwd, expanded);
+  return resolveDirWithRuntime(spec, cwd, DEFAULT_PATH_RUNTIME);
 }
 
 /**
- * Return true when a write/edit `target` path lies strictly inside one of the
- * allowed directories. The built-in write/edit tools strip one leading `@`
- * from their path argument, so apply that rule only to `target`, not to
- * configured directory specs. Comparison uses POSIX-normalized absolute paths
- * so it works on Windows and POSIX alike.
+ * Return true when a write/edit target lies strictly inside an allowed
+ * directory, using Pi-compatible tool-input path handling.
  */
 export function isPathInDirs(target: string, allowedDirs: readonly string[], cwd: string): boolean {
-  if (allowedDirs.length === 0) return false;
-  const toolPath = target.startsWith("@") ? target.slice(1) : target;
-  const targetAbs = toComparablePath(resolve(cwd, toolPath));
-  for (const spec of allowedDirs) {
-    const dir = toComparablePath(resolveDir(spec, cwd));
-    const rel = posix.relative(dir, targetAbs);
-    if (rel !== "" && rel !== ".." && !rel.startsWith("../")) return true;
-  }
-  return false;
+  return isPathInDirsWithRuntime(target, allowedDirs, cwd, DEFAULT_PATH_RUNTIME);
 }

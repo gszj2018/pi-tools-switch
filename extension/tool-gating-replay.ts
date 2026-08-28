@@ -37,9 +37,9 @@ function replayLastModeName(
       // custom_message -> details, custom -> data.
       return replayModeName(entry.type === "custom_message" ? entry.details : entry.data);
     }
-    return { modeName: undefined };
+    return replayNoModeName();
   } catch (error) {
-    return replayError(error);
+    return replayInvalidModeName(error);
   }
 }
 
@@ -62,17 +62,22 @@ export function replayLastTriggeredModeName(ctx: ExtensionContext): ReplayResult
 
 function replayModeName(data: unknown): ReplayResult {
   if (data === null || typeof data !== "object" || !("modeName" in data)) {
-    return { modeName: null };
+    return replayInvalidModeName();
   }
 
   const { modeName } = data;
   if (typeof modeName === "string") return { modeName };
   // null is the JSON-safe persisted representation of no active mode.
-  if (modeName === null) return { modeName: undefined };
-  return { modeName: null };
+  if (modeName === null) return replayNoModeName();
+  return replayInvalidModeName();
 }
 
-function replayError(error: unknown): ReplayResult {
+function replayNoModeName(): ReplayResult {
+  return { modeName: undefined };
+}
+
+function replayInvalidModeName(error?: unknown): ReplayResult {
+  if (error === undefined) return { modeName: null };
   return {
     modeName: null,
     error: error instanceof Error ? error.message : String(error),

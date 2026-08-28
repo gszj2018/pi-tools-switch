@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   BUILTIN_GATING_EXIT_TRIGGERS,
   BUILTIN_GATING_MODES,
@@ -25,6 +26,8 @@ const PLANS_DIR = path.resolve(CWD, ".agents", "plans");
 const PLAN_FILE = path.join(PLANS_DIR, "plan.md");
 const NESTED_PLAN_FILE = path.join(PLANS_DIR, "nested", "plan.md");
 const OUTSIDE_FILE = path.resolve(CWD, "src", "file.ts");
+const PLAN_FILE_URL = pathToFileURL(PLAN_FILE).href;
+const OUTSIDE_FILE_URL = pathToFileURL(OUTSIDE_FILE).href;
 const PARENT_DIR = path.resolve(PLANS_DIR, "..");
 const ABS_PLANS_DIR = resolveDir(".agents/plans", CWD);
 const BUILTIN_PLAN = BUILTIN_GATING_MODES["plan"];
@@ -142,6 +145,19 @@ test("decideToolCall allows write/edit strictly inside allowWriteDir", () => {
   }
 });
 
+test("decideToolCall gates normal file URLs and fails closed for malformed URLs", () => {
+  for (const tool of ["write", "edit"]) {
+    const allowed = decideToolCall(tool, { path: PLAN_FILE_URL }, "plan", BUILTIN_PLAN, CWD);
+    assert.equal(allowed.allowed, true, `${tool} file URL inside allowWriteDir should be allowed`);
+
+    const blocked = decideToolCall(tool, { path: OUTSIDE_FILE_URL }, "plan", BUILTIN_PLAN, CWD);
+    assert.equal(blocked.allowed, false, `${tool} file URL outside allowWriteDir should be blocked`);
+
+    const malformed = decideToolCall(tool, { path: "file:///%ZZ" }, "plan", BUILTIN_PLAN, CWD);
+    assert.equal(malformed.allowed, false, `${tool} malformed file URL should fail closed`);
+  }
+});
+
 test("decideToolCall blocks write/edit paths equal to allowWriteDir", () => {
   for (const tool of ["write", "edit"]) {
     const d = decideToolCall(tool, { path: PLANS_DIR }, "plan", BUILTIN_PLAN, CWD);
@@ -255,13 +271,6 @@ test("decideToolCall blocks write with missing or non-string path", () => {
   assert.equal(d1.allowed, false);
   const d2 = decideToolCall("write", { path: 42 }, "plan", BUILTIN_PLAN, CWD);
   assert.equal(d2.allowed, false);
-});
-
-test("decideToolCall fails closed when write/edit path parsing throws", () => {
-  for (const tool of ["write", "edit"]) {
-    const decision = decideToolCall(tool, { path: "file:///%ZZ" }, "plan", BUILTIN_PLAN, CWD);
-    assert.equal(decision.allowed, false, `${tool} should be blocked`);
-  }
 });
 
 test("formatModeStatus renders matching and pending reported states", () => {

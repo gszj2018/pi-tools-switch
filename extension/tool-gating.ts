@@ -83,12 +83,12 @@ export function matchTrigger(
 
 /** Render the reported and active mode names, including pending state changes. */
 export function formatModeStatus(
-  lastReported: string | undefined | null,
-  active: string | undefined,
+  lastReported: string | null | undefined,
+  active: string | null,
 ): string {
-  const formatName = (name: string | undefined | null): string => {
-    if (name === undefined) return "-";
-    if (name === null) return "?";
+  const formatName = (name: string | null | undefined): string => {
+    if (name === null) return "-";
+    if (name === undefined) return "?";
     return name;
   };
   if (lastReported === active) return `[M: ${formatName(active)}]`;
@@ -124,8 +124,8 @@ export function buildBlockReason(modeName: string, mode: GatingModeConfig): stri
  * mode and its restrictions, or that no gating mode is active.
  */
 export function buildModeMessage(
-  modeName: string | undefined,
-  mode: GatingModeConfig | undefined,
+  modeName: string | null,
+  mode: GatingModeConfig | null,
   cwd: string,
 ): string {
   if (!modeName || !mode) {
@@ -151,10 +151,10 @@ export function buildModeMessage(
  * active mode differs from the mode reported by the previous injected message.
  */
 export function shouldInjectModeMessage(
-  lastReportedModeName: string | undefined | null,
-  activeModeName: string | undefined,
+  lastReportedModeName: string | null | undefined,
+  activeModeName: string | null,
 ): boolean {
-  return lastReportedModeName === null || activeModeName !== lastReportedModeName;
+  return lastReportedModeName === undefined || activeModeName !== lastReportedModeName;
 }
 
 /** Format a persisted trigger entry as a compact TUI history line. */
@@ -181,8 +181,8 @@ interface GatingDecision {
 export function decideToolCall(
   toolName: string,
   input: unknown,
-  modeName: string | undefined,
-  mode: GatingModeConfig | undefined,
+  modeName: string | null,
+  mode: GatingModeConfig | null,
   cwd: string,
 ): GatingDecision {
   if (!mode || !modeName) return { allowed: true };
@@ -207,11 +207,11 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   // fully overrides them.
   const exitTriggers = mergeGatingExitTriggers(getConfig().gatingExitTrigger);
 
-  let activeModeName: string | undefined;
-  let activeMode: GatingModeConfig | undefined;
-  // Start unknown until session_start restores the active branch. undefined
-  // means no gating mode; null means the persisted state could not be recognized.
-  let lastReportedModeName: string | undefined | null = null;
+  let activeModeName: string | null = null;
+  let activeMode: GatingModeConfig | null = null;
+  // Start unknown until session_start restores the active branch. null means
+  // no gating mode; undefined means the persisted state could not be recognized.
+  let lastReportedModeName: string | null | undefined = undefined;
   // Guard flag: raised once the mode is confirmed at before_agent_start and
   // cleared at agent_settled. While raised, input events (e.g. steering
   // input) must not change the mode.
@@ -231,10 +231,10 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   };
 
   /** Apply a configured mode (or no mode), returning false for an unknown name. */
-  const setMode = (name: string | undefined, ctx: ExtensionContext): boolean => {
-    if (name === undefined) {
-      activeModeName = undefined;
-      activeMode = undefined;
+  const setMode = (name: string | null, ctx: ExtensionContext): boolean => {
+    if (name === null) {
+      activeModeName = null;
+      activeMode = null;
     } else {
       const mode = modes[name];
       if (!mode) return false;
@@ -245,9 +245,9 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
     return true;
   };
 
-  const appendModeTrigger = (name: string | undefined, ctx: ExtensionContext): void => {
+  const appendModeTrigger = (name: string | null, ctx: ExtensionContext): void => {
     try {
-      pi.appendEntry(MODE_TRIGGER_CUSTOM_TYPE, { modeName: name ?? null });
+      pi.appendEntry(MODE_TRIGGER_CUSTOM_TYPE, { modeName: name });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       ctx.ui.notify(`tools-switch: failed to persist gating trigger: ${message}`, "error");
@@ -255,7 +255,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   };
 
   /** Change modes from a user/runtime trigger and persist actual transitions. */
-  const triggerMode = (name: string | undefined, ctx: ExtensionContext): boolean => {
+  const triggerMode = (name: string | null, ctx: ExtensionContext): boolean => {
     if (name === activeModeName) return false;
     if (!setMode(name, ctx)) return false;
     appendModeTrigger(name, ctx);
@@ -264,7 +264,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
 
   const restoreTriggeredMode = (ctx: ExtensionContext): void => {
     const result = replayLastTriggeredModeName(ctx);
-    if (result.modeName === null) {
+    if (result.modeName === undefined) {
       const reason = result.error ?? "invalid trigger record";
       ctx.ui.notify(`tools-switch: failed to restore gating mode: ${reason}`, "error");
       return;
@@ -323,7 +323,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
           terminate: true;
         } => {
           ctx.ui.notify(params.summary, "info");
-          if (closing) triggerMode(undefined, ctx);
+          if (closing) triggerMode(null, ctx);
           const text = closing
             ? `The user has accepted. Exiting ${modeName} mode now.`
             : `The user has accepted. You are still in ${modeName} mode.`;
@@ -399,7 +399,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
       return;
     }
     if (exitMatch) {
-      triggerMode(undefined, ctx);
+      triggerMode(null, ctx);
       return;
     }
     refreshStatus(ctx);
@@ -433,8 +433,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
         customType: MODE_MESSAGE_CUSTOM_TYPE,
         content: buildModeMessage(activeModeName, activeMode, ctx.cwd),
         display: true,
-        // JSON omits undefined properties, so persist no active mode as null.
-        details: { modeName: activeModeName ?? null },
+        // activeModeName is always JSON-safe: string for a mode or null for no mode.
+        details: { modeName: activeModeName },
       },
     };
   });

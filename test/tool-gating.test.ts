@@ -105,7 +105,7 @@ test("matchAnyTrigger matches any non-empty trigger prefix", () => {
 
 test("decideToolCall allows everything when no mode is active", () => {
   for (const tool of ["bash", "powershell"]) {
-    const d = decideToolCall(tool, { command: "echo hi" }, undefined, undefined, CWD);
+    const d = decideToolCall(tool, { command: "echo hi" }, null, null, CWD);
     assert.deepEqual(d, { allowed: true }, `${tool} should be allowed without an active mode`);
   }
 });
@@ -275,30 +275,30 @@ test("decideToolCall blocks write with missing or non-string path", () => {
 
 test("formatModeStatus renders matching and pending reported states", () => {
   assert.equal(formatModeStatus("plan", "plan"), "[M: plan]");
-  assert.equal(formatModeStatus("plan", undefined), "[M: plan => -]");
-  assert.equal(formatModeStatus(undefined, "plan"), "[M: - => plan]");
+  assert.equal(formatModeStatus("plan", null), "[M: plan => -]");
+  assert.equal(formatModeStatus(null, "plan"), "[M: - => plan]");
   assert.equal(formatModeStatus("plan", "explore"), "[M: plan => explore]");
-  assert.equal(formatModeStatus(null, undefined), "[M: ? => -]");
-  assert.equal(formatModeStatus(null, "plan"), "[M: ? => plan]");
-  assert.equal(formatModeStatus(undefined, undefined), "[M: -]");
+  assert.equal(formatModeStatus(undefined, null), "[M: ? => -]");
+  assert.equal(formatModeStatus(undefined, "plan"), "[M: ? => plan]");
+  assert.equal(formatModeStatus(null, null), "[M: -]");
 });
 
 test("shouldInjectModeMessage forces injection only when the reported state is unknown", () => {
-  assert.equal(shouldInjectModeMessage(null, undefined), true);
-  assert.equal(shouldInjectModeMessage(null, "plan"), true);
-  assert.equal(shouldInjectModeMessage(undefined, undefined), false);
+  assert.equal(shouldInjectModeMessage(undefined, null), true);
+  assert.equal(shouldInjectModeMessage(undefined, "plan"), true);
+  assert.equal(shouldInjectModeMessage(null, null), false);
   assert.equal(shouldInjectModeMessage("plan", "plan"), false);
 });
 
 test("shouldInjectModeMessage injects when the mode changed vs the previously reported mode", () => {
-  assert.equal(shouldInjectModeMessage("plan", undefined), true); // left the mode
-  assert.equal(shouldInjectModeMessage(undefined, "plan"), true); // entered a mode
+  assert.equal(shouldInjectModeMessage("plan", null), true); // left the mode
+  assert.equal(shouldInjectModeMessage(null, "plan"), true); // entered a mode
   assert.equal(shouldInjectModeMessage("plan", "explore"), true); // switched modes
 });
 
 test("buildModeMessage reports no active mode and free tool use", () => {
   assert.equal(
-    buildModeMessage(undefined, undefined, CWD),
+    buildModeMessage(null, null, CWD),
     "You are not currently in any gating mode. You may call any available tool.",
   );
 });

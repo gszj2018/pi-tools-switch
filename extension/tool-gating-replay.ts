@@ -8,10 +8,10 @@ export const MODE_TRIGGER_CUSTOM_TYPE = "pi-tools-switch-trigger";
 
 export interface ReplayResult {
   /**
-   * string: a known gating mode; undefined: no gating mode; null: the stored
+   * string: a known gating mode; null: no gating mode; undefined: the stored
    * state could not be recognized and the caller must force a new message.
    */
-  modeName: string | undefined | null;
+  modeName: string | null | undefined;
   /** The replay failure message, when reading the active branch throws. */
   error?: string;
 }
@@ -73,13 +73,13 @@ function replayModeName(data: unknown): ReplayResult {
 }
 
 function replayNoModeName(): ReplayResult {
-  return { modeName: undefined };
+  return { modeName: null };
 }
 
 function replayInvalidModeName(error?: unknown): ReplayResult {
-  if (error === undefined) return { modeName: null };
+  if (error === undefined) return { modeName: undefined };
   return {
-    modeName: null,
+    modeName: undefined,
     error: error instanceof Error ? error.message : String(error),
   };
 }

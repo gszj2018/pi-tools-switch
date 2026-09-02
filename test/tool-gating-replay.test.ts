@@ -35,23 +35,23 @@ function triggerEntry(data?: unknown): unknown {
   };
 }
 
-test("replayLastReportedModeName returns undefined when the active branch has no mode message", () => {
+test("replayLastReportedModeName returns null when the active branch has no mode message", () => {
   const ctx = createContext(() => []);
 
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
+  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: null });
 });
 
 test("replayLastReportedModeName restores an explicit persisted no-mode state", () => {
   const ctx = createContext(() => [modeMessage({ modeName: null })]);
 
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
+  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: null });
 });
 
 test("replayLastReportedModeName preserves the no-mode marker through JSON serialization", () => {
   const persistedMessage = JSON.parse(JSON.stringify(modeMessage({ modeName: null })));
   const ctx = createContext(() => [persistedMessage]);
 
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
+  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: null });
 });
 
 test("replayLastReportedModeName restores a known mode name", () => {
@@ -90,14 +90,14 @@ test("replayLastReportedModeName treats missing or malformed details as unknown"
     { modeName: false },
   ]) {
     const ctx = createContext(() => [modeMessage(details)]);
-    assert.deepEqual(replayLastReportedModeName(ctx), { modeName: null });
+    assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
   }
 });
 
 test("replayLastReportedModeName treats legacy mode messages without details as unknown", () => {
   const ctx = createContext(() => [modeMessage()]);
 
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: null });
+  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
 });
 
 test("replayLastReportedModeName returns an error when reading the active branch fails", () => {
@@ -106,17 +106,17 @@ test("replayLastReportedModeName returns an error when reading the active branch
   });
 
   assert.deepEqual(replayLastReportedModeName(ctx), {
-    modeName: null,
+    modeName: undefined,
     error: "session unavailable",
   });
 });
 
 // --- Persisted trigger-entry replay ----------------------------------------
 
-test("replayLastTriggeredModeName returns undefined without a trigger entry", () => {
+test("replayLastTriggeredModeName returns null without a trigger entry", () => {
   const ctx = createContext(() => []);
 
-  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: undefined });
+  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: null });
 });
 
 test("replayLastTriggeredModeName restores an enabled mode name", () => {
@@ -129,7 +129,7 @@ test("replayLastTriggeredModeName restores an explicit persisted disabled state"
   const persistedEntry = JSON.parse(JSON.stringify(triggerEntry({ modeName: null })));
   const ctx = createContext(() => [persistedEntry]);
 
-  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: undefined });
+  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: null });
 });
 
 test("replayLastTriggeredModeName uses the latest matching trigger entry", () => {
@@ -162,7 +162,7 @@ test("replayLastTriggeredModeName treats malformed trigger data as unknown", () 
     { modeName: false },
   ]) {
     const ctx = createContext(() => [triggerEntry(data)]);
-    assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: null });
+    assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: undefined });
   }
 });
 
@@ -178,7 +178,7 @@ test("replayLastTriggeredModeName returns an error when reading the active branc
   });
 
   assert.deepEqual(replayLastTriggeredModeName(ctx), {
-    modeName: null,
+    modeName: undefined,
     error: "session unavailable",
   });
 });

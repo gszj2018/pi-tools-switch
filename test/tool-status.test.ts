@@ -1,8 +1,11 @@
 /** Unit tests for the read-only tool status module. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { ToolStatusSnapshot } from "../extension/builtin-tools.ts";
-import type { GatingStatusReader, GatingToolStatus } from "../extension/tool-gating.ts";
+import type {
+  GatingStatusReader,
+  GatingToolStatus,
+  ToolStatusSnapshot,
+} from "../extension/utils-status.ts";
 import {
   formatToolStatus,
   getGatingStatusMarker,

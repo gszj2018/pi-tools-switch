@@ -15,6 +15,7 @@ import {
   type BuiltinToolName,
 } from "./utils.ts";
 import type { Config } from "./config.ts";
+import type { ToolStatusReader, ToolStatusSnapshot } from "./utils-status.ts";
 import { rejectUnexpectedArgs } from "./utils-pi.ts";
 
 const STATUS_BAR_KEY = "pi-tools-switch-status";
@@ -106,16 +107,6 @@ export function toggleBuiltinTools(
 export function formatPresetLine(name: string, tools: readonly string[]): string {
   return `${computeStatusBar(tools)} ${name}`;
 }
-
-/** An immutable status record for a tool known to Pi. */
-export interface ToolStatusSnapshot {
-  readonly name: string;
-  readonly enabled: boolean;
-  readonly builtIn: boolean;
-}
-
-/** Read-only accessor for fresh snapshots of Pi tool state. */
-export type ToolStatusReader = () => readonly ToolStatusSnapshot[];
 
 /**
  * Create a fresh, deeply immutable snapshot from the supplied tool lists.

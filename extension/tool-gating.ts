@@ -19,19 +19,11 @@ import {
   replayLastTriggeredModeName,
 } from "./tool-gating-replay.ts";
 import type { Config, GatingModeConfig } from "./config.ts";
+import type { GatingStatusReader, GatingToolStatus } from "./utils-status.ts";
 
 const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
 
 export const EXIT_MODE_TOOL_NAME = "exit_mode";
-
-/** Immutable, derived gate status for a single tool. */
-export interface GatingToolStatus {
-  readonly unrestricted: boolean;
-  readonly hasAllowedWriteDir: boolean;
-}
-
-/** Read-only accessor for the derived gating status of a named tool. */
-export type GatingStatusReader = (toolName: string) => GatingToolStatus;
 
 /**
  * Return whether a tool is allowed without a write/edit path check. This pure

@@ -6,11 +6,12 @@
  * or session entries.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import {
-  type ToolStatusReader,
-  type ToolStatusSnapshot,
-} from "./builtin-tools.ts";
-import type { GatingStatusReader, GatingToolStatus } from "./tool-gating.ts";
+import type {
+  GatingStatusReader,
+  GatingToolStatus,
+  ToolStatusReader,
+  ToolStatusSnapshot,
+} from "./utils-status.ts";
 import { rejectUnexpectedArgs } from "./utils-pi.ts";
 
 export type GatingStatusMarker = "[ ]" | "[-]" | "[*]";

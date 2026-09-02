@@ -16,7 +16,7 @@ type Handler = (event: unknown, ctx: unknown) => unknown;
 function createMockPi() {
   const handlers: { event: string; handler: Handler }[] = [];
   let registeredTools = 0;
-  let registeredCommands = 0;
+  const registeredCommandNames: string[] = [];
   let activeToolChanges = 0;
 
   // noinspection JSUnusedGlobalSymbols
@@ -27,8 +27,8 @@ function createMockPi() {
     registerTool() {
       registeredTools += 1;
     },
-    registerCommand() {
-      registeredCommands += 1;
+    registerCommand(name: string) {
+      registeredCommandNames.push(name);
     },
     setActiveTools() {
       activeToolChanges += 1;
@@ -38,7 +38,12 @@ function createMockPi() {
   return {
     pi: pi as unknown as ExtensionAPI,
     events: (): string[] => handlers.map(({ event }) => event),
-    registrations: () => ({ registeredTools, registeredCommands, activeToolChanges }),
+    commandNames: () => [...registeredCommandNames],
+    registrations: () => ({
+      registeredTools,
+      registeredCommands: registeredCommandNames.length,
+      activeToolChanges,
+    }),
     async emit(event: string, data: unknown): Promise<unknown> {
       let result: unknown;
       for (const entry of handlers) {
@@ -71,6 +76,7 @@ test("registerForSubagent registers no tools, commands, gates, or status events"
   registerForSubagent(mock.pi);
 
   assert.deepEqual(mock.events(), ["before_agent_start"]);
+  assert.ok(!mock.commandNames().includes("ptsw-status"));
   assert.deepEqual(mock.registrations(), {
     registeredTools: 0,
     registeredCommands: 0,

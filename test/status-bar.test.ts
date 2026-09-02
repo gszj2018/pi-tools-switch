@@ -6,7 +6,6 @@ import assert from "node:assert/strict";
 import {
   computeStatusBar,
   formatPresetLine,
-  formatToolsStatus,
 } from "../extension/builtin-tools.ts";
 
 test("computeStatusBar renders [RWEBPFGL] when all managed built-in tools are active", () => {
@@ -43,12 +42,3 @@ test("formatPresetLine includes name and shorthand", () => {
   );
 });
 
-test("formatToolsStatus marks on/off and built-in kind", () => {
-  const all = [
-    { name: "read" },
-    { name: "bash" },
-    { name: "my_custom_tool" },
-  ];
-  const text = formatToolsStatus(["read"], all);
-  assert.equal(text, "[+] read (built-in)\n[ ] bash (built-in)\n[ ] my_custom_tool");
-});

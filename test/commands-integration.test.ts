@@ -1,8 +1,8 @@
 /**
  * Integration tests for pi-tools-switch Slash commands.
  *
- * Drives the built-in-tools and tool-gating modules through one lightweight
- * mock ExtensionAPI, covering command registration, completion binding,
+ * Drives the built-in-tools, tool-gating, and tool-status modules through one
+ * lightweight mock ExtensionAPI, covering command registration, completion binding,
  * handlers, active-tool state changes, and UI notifications.
  */
 import { test } from "node:test";
@@ -11,6 +11,7 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-c
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { register as registerBuiltinTools } from "../extension/builtin-tools.ts";
 import { register as registerToolGating } from "../extension/tool-gating.ts";
+import { register as registerToolStatus } from "../extension/tool-status.ts";
 import { DEFAULT_CONFIG, type Config } from "../extension/config.ts";
 
 interface CommandDefinition {
@@ -42,13 +43,13 @@ const TEST_CONFIG: Config = {
 };
 
 const TARGET_COMMANDS = [
-  "ptsw-builtin-status",
   "ptsw-builtin-enable",
   "ptsw-builtin-disable",
   "ptsw-preset-list",
   "ptsw-preset-apply",
   "ptsw-mode-list",
   "ptsw-mode-show",
+  "ptsw-status",
 ] as const;
 
 function createMockCtx() {
@@ -101,6 +102,7 @@ function createMockPi(initialActiveTools: string[] = ["read", "external_tool"]) 
       if (!allToolNames.includes(definition.name)) allToolNames.push(definition.name);
     },
     registerEntryRenderer: () => {},
+    appendEntry: () => {},
     getActiveTools: () => [...activeTools],
     setActiveTools(next: string[]) {
       activeTools = [...next];
@@ -115,9 +117,13 @@ function createMockPi(initialActiveTools: string[] = ["read", "external_tool"]) 
     setActiveTools(next: string[]) {
       activeTools = [...next];
     },
-    async emit(eventName: string, ctx: ExtensionCommandContext): Promise<void> {
+    async emit(
+      eventName: string,
+      ctx: ExtensionCommandContext,
+      eventData: unknown = {},
+    ): Promise<void> {
       for (const handler of eventHandlers.get(eventName) ?? []) {
-        await handler({}, ctx);
+        await handler(eventData, ctx);
       }
     },
   };
@@ -129,7 +135,8 @@ async function setup(config: Config = TEST_CONFIG) {
   // action methods like setActiveTools only run once the session runtime is
   // initialized.
   const readToolStatus = registerBuiltinTools(mock.pi, () => config);
-  registerToolGating(mock.pi, () => config);
+  const readGatingStatus = registerToolGating(mock.pi, () => config);
+  registerToolStatus(mock.pi, readToolStatus, readGatingStatus);
   const context = createMockCtx();
 
   // Real activation flow: session_start activates exit_mode and refreshes the
@@ -142,7 +149,8 @@ async function setup(config: Config = TEST_CONFIG) {
     await command.handler(args, context.ctx);
   };
 
-  const emit = async (eventName: string): Promise<void> => mock.emit(eventName, context.ctx);
+  const emit = async (eventName: string, eventData: unknown = {}): Promise<void> =>
+    mock.emit(eventName, context.ctx, eventData);
 
   return { ...mock, ...context, readToolStatus, invoke, emit };
 }
@@ -205,22 +213,14 @@ test("binds completions only to commands that accept completable arguments", asy
     { value: "review", label: "review" },
   ]);
 
-  for (const name of [
-    "ptsw-builtin-status",
-    "ptsw-preset-list",
-    "ptsw-mode-list",
-  ]) {
+  for (const name of ["ptsw-status", "ptsw-preset-list", "ptsw-mode-list"]) {
     assert.equal(mock.commands.get(name)!.getArgumentCompletions, undefined);
   }
 });
 
 test("argument-free commands reject extra arguments through the shared Pi utility", async () => {
   const mock = await setup();
-  for (const name of [
-    "ptsw-builtin-status",
-    "ptsw-preset-list",
-    "ptsw-mode-list",
-  ]) {
+  for (const name of ["ptsw-status", "ptsw-preset-list", "ptsw-mode-list"]) {
     mock.notifications.length = 0;
     const before = mock.activeTools();
     await mock.invoke(name, "unexpected");
@@ -232,15 +232,18 @@ test("argument-free commands reject extra arguments through the shared Pi utilit
   }
 });
 
-test("ptsw-builtin-status reports built-in and external tool state", async () => {
+test("ptsw-status reports enabled and active-gate state for built-in and external tools", async () => {
   const mock = await setup();
-  await mock.invoke("ptsw-builtin-status");
+  await mock.emit("input", { text: "REVIEW:" });
+  await mock.invoke("ptsw-status");
   const notification = lastNotification(mock.notifications);
   assert.equal(notification.level, "info");
-  assert.match(notification.message, /\[\+] read \(built-in\)/);
-  assert.match(notification.message, /\[ ] write \(built-in\)/);
-  assert.match(notification.message, /\[ ] powershell \(built-in\)/);
-  assert.match(notification.message, /\[\+] external_tool/);
+  assert.match(notification.message, /\[\+\]\[ \] read \(built-in\)/);
+  assert.match(notification.message, /\[ \]\[\*\] write \(built-in\)/);
+  assert.match(notification.message, /\[ \]\[ \] bash \(built-in\)/);
+  assert.match(notification.message, /\[ \]\[-\] powershell \(built-in\)/);
+  assert.match(notification.message, /\[\+\]\[-\] external_tool/);
+  assert.match(notification.message, /\[\+\]\[ \] exit_mode/);
 });
 
 test("builtin enable and disable support multiple tools and preserve external tools", async () => {

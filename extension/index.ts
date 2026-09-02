@@ -18,6 +18,7 @@ import {
   register as registerToolGating,
   registerForSubagent,
 } from "./tool-gating.ts";
+import { register as registerToolStatus } from "./tool-status.ts";
 
 export default async function (pi: ExtensionAPI): Promise<void> {
   let config: Config = DEFAULT_CONFIG;
@@ -48,6 +49,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
     return;
   }
 
-  registerBuiltinTools(pi, getConfig);
-  registerToolGating(pi, getConfig);
+  const readToolStatus = registerBuiltinTools(pi, getConfig);
+  const readGatingStatus = registerToolGating(pi, getConfig);
+  registerToolStatus(pi, readToolStatus, readGatingStatus);
 }

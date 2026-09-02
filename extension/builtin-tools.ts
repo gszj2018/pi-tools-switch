@@ -128,21 +128,6 @@ export function getToolStatus(
   );
 }
 
-/** Legacy text block listing all tools with their on/off state. */
-export function formatToolsStatus(
-  activeTools: readonly string[],
-  allTools: readonly { name: string }[],
-): string {
-  const active = new Set(activeTools);
-  return allTools
-    .map((tool) => {
-      const state = active.has(tool.name) ? "[+]" : "[ ]";
-      const kind = isBuiltinToolName(tool.name) ? " (built-in)" : "";
-      return `${state} ${tool.name}${kind}`;
-    })
-    .join("\n");
-}
-
 export function builtinToolCompletions(prefix: string): AutocompleteItem[] | null {
   const parts = prefix.split(/\s+/);
   // Drop only trailing empty tokens produced by trailing whitespace. The
@@ -208,14 +193,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): ToolStatusR
     pi.setActiveTools(next);
     return { next, ok: true };
   };
-
-  pi.registerCommand("ptsw-builtin-status", {
-    description: "Show all tool status",
-    handler: async (args, ctx) => {
-      if (rejectUnexpectedArgs(args, "/ptsw-builtin-status", ctx)) return;
-      ctx.ui.notify(formatToolsStatus(pi.getActiveTools(), pi.getAllTools()), "info");
-    },
-  });
 
   const registerToolToggleCommand = (enabled: boolean): void => {
     const action = enabled ? "enable" : "disable";

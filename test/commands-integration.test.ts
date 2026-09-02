@@ -128,7 +128,7 @@ async function setup(config: Config = TEST_CONFIG) {
   // Factory-phase registration registers commands and the exit_mode tool, but
   // action methods like setActiveTools only run once the session runtime is
   // initialized.
-  registerBuiltinTools(mock.pi, () => config);
+  const readToolStatus = registerBuiltinTools(mock.pi, () => config);
   registerToolGating(mock.pi, () => config);
   const context = createMockCtx();
 
@@ -144,7 +144,7 @@ async function setup(config: Config = TEST_CONFIG) {
 
   const emit = async (eventName: string): Promise<void> => mock.emit(eventName, context.ctx);
 
-  return { ...mock, ...context, invoke, emit };
+  return { ...mock, ...context, readToolStatus, invoke, emit };
 }
 
 function lastNotification(notifications: Notification[]): Notification {
@@ -152,6 +152,27 @@ function lastNotification(notifications: Notification[]): Notification {
   assert.ok(notification, "expected a UI notification");
   return notification;
 }
+
+test("builtin-tools registration returns a reader tied to the Pi tool state", async () => {
+  const mock = await setup();
+  assert.equal(typeof mock.readToolStatus, "function");
+  const status = mock.readToolStatus();
+  assert.deepEqual(status.find((tool) => tool.name === "read"), {
+    name: "read",
+    enabled: true,
+    builtIn: true,
+  });
+  assert.deepEqual(status.find((tool) => tool.name === "external_tool"), {
+    name: "external_tool",
+    enabled: true,
+    builtIn: false,
+  });
+  assert.deepEqual(status.find((tool) => tool.name === "exit_mode"), {
+    name: "exit_mode",
+    enabled: true,
+    builtIn: false,
+  });
+});
 
 test("registers exactly the seven expected commands", async () => {
   const mock = await setup();

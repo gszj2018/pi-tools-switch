@@ -24,6 +24,29 @@ const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
 
 export const EXIT_MODE_TOOL_NAME = "exit_mode";
 
+/** Immutable data needed to report the active mode's tool permissions. */
+export interface GatingStatusSnapshot {
+  readonly activeModeName: string | null;
+  readonly allowTools: readonly string[];
+  readonly allowWriteDir: readonly string[];
+}
+
+/** Read-only accessor for a fresh snapshot of the current gating state. */
+export type GatingStatusReader = () => GatingStatusSnapshot;
+
+/**
+ * Create a fresh immutable snapshot from gating state. The function is pure:
+ * it does not mutate or retain the supplied mode data.
+ */
+export function getGatingStatus(
+  activeModeName: string | null,
+  activeMode: Pick<GatingModeConfig, "allowTools" | "allowWriteDir"> | null,
+): GatingStatusSnapshot {
+  const allowTools = Object.freeze([...(activeMode?.allowTools ?? [])]);
+  const allowWriteDir = Object.freeze([...(activeMode?.allowWriteDir ?? [])]);
+  return Object.freeze({ activeModeName, allowTools, allowWriteDir });
+}
+
 export const EXIT_MODE_PROMPT_SNIPPET =
   "Submit a concise one-sentence summary for the active gating mode and ask whether to exit, stay, or refine";
 
@@ -199,7 +222,7 @@ export function decideToolCall(
   return { allowed: false, reason: buildBlockReason(modeName, mode) };
 }
 
-export function register(pi: ExtensionAPI, getConfig: () => Config): void {
+export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatusReader {
   // Merged gating modes cached once at load time (rebuilt on extension reload).
   const modes = mergeGatingModes(getConfig().gatingModes);
   // Exit-trigger prefixes cached once at load time (rebuilt on extension reload):
@@ -216,6 +239,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   // cleared at agent_settled. While raised, input events (e.g. steering
   // input) must not change the mode.
   let modeGuardActive = false;
+
+  const readGatingStatus: GatingStatusReader = () => getGatingStatus(activeModeName, activeMode);
 
   const refreshStatus = (ctx: ExtensionContext): void => {
     ctx.ui.setStatus(MODE_STATUS_BAR_KEY, formatModeStatus(lastReportedModeName, activeModeName));
@@ -490,6 +515,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
       );
     },
   });
+
+  return readGatingStatus;
 }
 
 /**

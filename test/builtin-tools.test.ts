@@ -5,9 +5,40 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   builtinToolCompletions,
+  getToolStatus,
   toggleBuiltinTools,
   validateBuiltinTools,
 } from "../extension/builtin-tools.ts";
+
+test("getToolStatus returns a fresh immutable tool-state snapshot", () => {
+  let activeTools = ["read", "external_tool"];
+  let allTools = [{ name: "read" }, { name: "write" }, { name: "external_tool" }];
+
+  const snapshot = getToolStatus(activeTools, allTools);
+  assert.deepEqual(snapshot, [
+    { name: "read", enabled: true, builtIn: true },
+    { name: "write", enabled: false, builtIn: true },
+    { name: "external_tool", enabled: true, builtIn: false },
+  ]);
+  assert.ok(Object.isFrozen(snapshot));
+  assert.ok(Object.isFrozen(snapshot[0]));
+  assert.notEqual(getToolStatus(activeTools, allTools), snapshot);
+  assert.throws(() =>
+    (snapshot as unknown as { enabled: boolean }[]).push({ enabled: false }),
+  );
+  assert.throws(() => {
+    (snapshot[0] as { enabled: boolean }).enabled = false;
+  });
+
+  activeTools = ["write"];
+  allTools = [{ name: "write" }];
+  assert.deepEqual(snapshot, [
+    { name: "read", enabled: true, builtIn: true },
+    { name: "write", enabled: false, builtIn: true },
+    { name: "external_tool", enabled: true, builtIn: false },
+  ]);
+  assert.deepEqual(getToolStatus(activeTools, allTools), [{ name: "write", enabled: true, builtIn: true }]);
+});
 
 test("toggleBuiltinTools enables and disables a single built-in tool", () => {
   assert.deepEqual(toggleBuiltinTools([], ["read"], true), ["read"]);

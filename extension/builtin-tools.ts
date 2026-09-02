@@ -107,7 +107,37 @@ export function formatPresetLine(name: string, tools: readonly string[]): string
   return `${computeStatusBar(tools)} ${name}`;
 }
 
-/** Text block listing all tools with their on/off state. */
+/** An immutable status record for a tool known to Pi. */
+export interface ToolStatusSnapshot {
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly builtIn: boolean;
+}
+
+/** Read-only accessor for fresh snapshots of Pi tool state. */
+export type ToolStatusReader = () => readonly ToolStatusSnapshot[];
+
+/**
+ * Create a fresh, deeply immutable snapshot from the supplied tool lists.
+ * The function is pure: it does not mutate or retain either input.
+ */
+export function getToolStatus(
+  activeTools: Iterable<string>,
+  allTools: readonly { name: string }[],
+): readonly ToolStatusSnapshot[] {
+  const active = new Set(activeTools);
+  return Object.freeze(
+    allTools.map((tool) =>
+      Object.freeze({
+        name: tool.name,
+        enabled: active.has(tool.name),
+        builtIn: isBuiltinToolName(tool.name),
+      }),
+    ),
+  );
+}
+
+/** Legacy text block listing all tools with their on/off state. */
 export function formatToolsStatus(
   activeTools: readonly string[],
   allTools: readonly { name: string }[],
@@ -171,9 +201,10 @@ function presetNameCompletions(
   return filtered.length > 0 ? filtered : null;
 }
 
-export function register(pi: ExtensionAPI, getConfig: () => Config): void {
+export function register(pi: ExtensionAPI, getConfig: () => Config): ToolStatusReader {
   // Config-derived state cached once at load time (rebuilt on extension reload).
   const presets = mergePresets(getConfig().presets);
+  const readToolStatus: ToolStatusReader = () => getToolStatus(pi.getActiveTools(), pi.getAllTools());
 
   const refreshStatus = (ctx: ExtensionContext): void => {
     ctx.ui.setStatus(STATUS_BAR_KEY, computeStatusBar(pi.getActiveTools()));
@@ -275,4 +306,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): void {
   pi.on("turn_start", async (_event, ctx) => refreshStatus(ctx));
   pi.on("agent_settled", async (_event, ctx) => refreshStatus(ctx));
   pi.on("input", async (_event, ctx) => refreshStatus(ctx));
+
+  return readToolStatus;
 }

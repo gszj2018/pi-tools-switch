@@ -144,8 +144,8 @@ function createMockPi() {
 /** Register the gating module against a fresh mock; returns the mock handles. */
 function setup(config: Config = DEFAULT_CONFIG) {
   const mock = createMockPi();
-  register(mock.pi, () => config);
-  return mock;
+  const readGatingStatus = register(mock.pi, () => config);
+  return { ...mock, readGatingStatus };
 }
 
 /** Extract the injected mode-state message from a before_agent_start result. */
@@ -191,7 +191,37 @@ const EXPLORE_CONFIG: Config = {
   },
 };
 
-// --- A. Stable exit_mode metadata and mode-state injection ---------------
+// --- A. Read-only state snapshots and exit_mode metadata ------------------
+
+test("register returns a gating-status reader tied to its instance state", async () => {
+  const { emit, activeTools, appendedEntries, readGatingStatus } = setup({
+    ...DEFAULT_CONFIG,
+    gatingModes: {
+      plan: { trigger: ["/plan-mode"], allowTools: ["bash"], allowWriteDir: [".agents/plans"] },
+    },
+  });
+  assert.equal(typeof readGatingStatus, "function");
+  assert.deepEqual(readGatingStatus(), {
+    activeModeName: null,
+    allowTools: [],
+    allowWriteDir: [],
+  });
+
+  await emit("session_start");
+  const toolsBeforeRead = activeTools();
+  const entriesBeforeRead = [...appendedEntries];
+  await emit("input", { text: "/plan-mode" });
+  assert.deepEqual(readGatingStatus(), {
+    activeModeName: "plan",
+    allowTools: ["bash"],
+    allowWriteDir: [".agents/plans"],
+  });
+  assert.deepEqual(activeTools(), toolsBeforeRead);
+  assert.deepEqual(appendedEntries, [
+    ...entriesBeforeRead,
+    { customType: MODE_TRIGGER_CUSTOM_TYPE, data: { modeName: "plan" } },
+  ]);
+});
 
 test("registers one stable exit_mode with fixed prompt metadata and schema", async () => {
   const { emit, activeTools, toolDefinitions } = setup(EXPLORE_CONFIG);

@@ -13,6 +13,7 @@ import {
   buildModeMessage,
   decideToolCall,
   formatModeStatus,
+  getGatingStatus,
   matchAnyTrigger,
   matchTrigger,
   mergeGatingExitTriggers,
@@ -271,6 +272,39 @@ test("decideToolCall blocks write with missing or non-string path", () => {
   assert.equal(d1.allowed, false);
   const d2 = decideToolCall("write", { path: 42 }, "plan", BUILTIN_PLAN, CWD);
   assert.equal(d2.allowed, false);
+});
+
+test("getGatingStatus returns a fresh immutable snapshot without retaining mode data", () => {
+  const mode = { trigger: ["REVIEW:"], allowTools: ["bash"], allowWriteDir: ["docs"] };
+  const snapshot = getGatingStatus("review", mode);
+
+  assert.deepEqual(snapshot, {
+    activeModeName: "review",
+    allowTools: ["bash"],
+    allowWriteDir: ["docs"],
+  });
+  assert.ok(Object.isFrozen(snapshot));
+  assert.ok(Object.isFrozen(snapshot.allowTools));
+  assert.ok(Object.isFrozen(snapshot.allowWriteDir));
+  assert.notEqual(getGatingStatus("review", mode), snapshot);
+  assert.throws(() => {
+    (snapshot as { activeModeName: string | null }).activeModeName = null;
+  });
+  assert.throws(() => (snapshot.allowTools as unknown as string[]).push("powershell"));
+  assert.throws(() => (snapshot.allowWriteDir as unknown as string[]).push("outside"));
+
+  mode.allowTools.push("powershell");
+  mode.allowWriteDir.push("other");
+  assert.deepEqual(snapshot, {
+    activeModeName: "review",
+    allowTools: ["bash"],
+    allowWriteDir: ["docs"],
+  });
+  assert.deepEqual(getGatingStatus(null, null), {
+    activeModeName: null,
+    allowTools: [],
+    allowWriteDir: [],
+  });
 });
 
 test("formatModeStatus renders matching and pending reported states", () => {

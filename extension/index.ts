@@ -20,6 +20,7 @@ import {
 } from "./tool-gating.ts";
 import { register as registerToolStatus } from "./tool-status.ts";
 
+// noinspection JSUnusedGlobalSymbols
 export default async function (pi: ExtensionAPI): Promise<void> {
   let config: Config = DEFAULT_CONFIG;
   const problems: string[] = [];

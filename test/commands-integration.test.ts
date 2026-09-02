@@ -238,12 +238,12 @@ test("ptsw-status reports enabled and active-gate state for built-in and externa
   await mock.invoke("ptsw-status");
   const notification = lastNotification(mock.notifications);
   assert.equal(notification.level, "info");
-  assert.match(notification.message, /\[\+\]\[ \] read \(built-in\)/);
-  assert.match(notification.message, /\[ \]\[\*\] write \(built-in\)/);
-  assert.match(notification.message, /\[ \]\[ \] bash \(built-in\)/);
-  assert.match(notification.message, /\[ \]\[-\] powershell \(built-in\)/);
-  assert.match(notification.message, /\[\+\]\[-\] external_tool/);
-  assert.match(notification.message, /\[\+\]\[ \] exit_mode/);
+  assert.match(notification.message, /\[\+]\[ ] read \(built-in\)/);
+  assert.match(notification.message, /\[ ]\[\*] write \(built-in\)/);
+  assert.match(notification.message, /\[ ]\[ ] bash \(built-in\)/);
+  assert.match(notification.message, /\[ ]\[-] powershell \(built-in\)/);
+  assert.match(notification.message, /\[\+]\[-] external_tool/);
+  assert.match(notification.message, /\[\+]\[ ] exit_mode/);
 });
 
 test("builtin enable and disable support multiple tools and preserve external tools", async () => {

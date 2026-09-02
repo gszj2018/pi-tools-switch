@@ -28,6 +28,7 @@ function createMockPi() {
   ];
   const commands = new Map<string, CommandDefinition>();
   const handlers = new Map<string, EventHandler[]>();
+  // noinspection JSUnusedGlobalSymbols
   const pi = {
     getActiveTools: () => [...activeTools],
     setActiveTools(tools: string[]) {

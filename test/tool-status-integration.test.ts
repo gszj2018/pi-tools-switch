@@ -115,10 +115,17 @@ test("ptsw-status combines registered tool and gating readers without modifying 
       level: "info",
     },
   ]);
-  assert.deepEqual(readGatingStatus(), {
-    activeModeName: "review",
-    allowTools: ["bash"],
-    allowWriteDir: ["docs"],
+  assert.deepEqual(readGatingStatus("bash"), {
+    unrestricted: true,
+    hasAllowedWriteDir: false,
+  });
+  assert.deepEqual(readGatingStatus("write"), {
+    unrestricted: false,
+    hasAllowedWriteDir: true,
+  });
+  assert.deepEqual(readGatingStatus("external_tool"), {
+    unrestricted: false,
+    hasAllowedWriteDir: false,
   });
 
   await command.handler("unexpected", ctx);
@@ -126,9 +133,8 @@ test("ptsw-status combines registered tool and gating readers without modifying 
     message: "Unexpected arguments. Usage: /ptsw-status",
     level: "error",
   });
-  assert.deepEqual(readGatingStatus(), {
-    activeModeName: "review",
-    allowTools: ["bash"],
-    allowWriteDir: ["docs"],
+  assert.deepEqual(readGatingStatus("external_tool"), {
+    unrestricted: false,
+    hasAllowedWriteDir: false,
   });
 });

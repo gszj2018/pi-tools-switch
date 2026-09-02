@@ -191,7 +191,7 @@ const EXPLORE_CONFIG: Config = {
   },
 };
 
-// --- A. Read-only state snapshots and exit_mode metadata ------------------
+// --- A. Read-only per-tool status and exit_mode metadata -----------------
 
 test("register returns a gating-status reader tied to its instance state", async () => {
   const { emit, activeTools, appendedEntries, readGatingStatus } = setup({
@@ -201,20 +201,26 @@ test("register returns a gating-status reader tied to its instance state", async
     },
   });
   assert.equal(typeof readGatingStatus, "function");
-  assert.deepEqual(readGatingStatus(), {
-    activeModeName: null,
-    allowTools: [],
-    allowWriteDir: [],
+  assert.deepEqual(readGatingStatus("anything"), {
+    unrestricted: true,
+    hasAllowedWriteDir: false,
   });
 
   await emit("session_start");
   const toolsBeforeRead = activeTools();
   const entriesBeforeRead = [...appendedEntries];
   await emit("input", { text: "/plan-mode" });
-  assert.deepEqual(readGatingStatus(), {
-    activeModeName: "plan",
-    allowTools: ["bash"],
-    allowWriteDir: [".agents/plans"],
+  assert.deepEqual(readGatingStatus("bash"), {
+    unrestricted: true,
+    hasAllowedWriteDir: false,
+  });
+  assert.deepEqual(readGatingStatus("write"), {
+    unrestricted: false,
+    hasAllowedWriteDir: true,
+  });
+  assert.deepEqual(readGatingStatus("external_tool"), {
+    unrestricted: false,
+    hasAllowedWriteDir: false,
   });
   assert.deepEqual(activeTools(), toolsBeforeRead);
   assert.deepEqual(appendedEntries, [

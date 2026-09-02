@@ -10,51 +10,29 @@ import {
   type ToolStatusReader,
   type ToolStatusSnapshot,
 } from "./builtin-tools.ts";
-import {
-  EXIT_MODE_TOOL_NAME,
-  type GatingStatusReader,
-  type GatingStatusSnapshot,
-} from "./tool-gating.ts";
-import { READ_ONLY_TOOLS } from "./utils.ts";
+import type { GatingStatusReader, GatingToolStatus } from "./tool-gating.ts";
 import { rejectUnexpectedArgs } from "./utils-pi.ts";
 
 export type GatingStatusMarker = "[ ]" | "[-]" | "[*]";
 
 /**
- * Return the marker that describes how an active gate treats a tool call.
- * Write/edit receive [*] only when their paths are conditionally permitted by
- * a non-empty allowWriteDir and they are not explicitly allowed outright.
+ * Return the marker that describes a tool's derived gating status. A [*]
+ * marker is used only for tools that are path-restricted write/edit calls.
  */
-export function getGatingStatusMarker(
-  toolName: string,
-  gatingStatus: GatingStatusSnapshot,
-): GatingStatusMarker {
-  if (gatingStatus.activeModeName === null) return "[ ]";
-  if (
-    toolName === EXIT_MODE_TOOL_NAME ||
-    READ_ONLY_TOOLS.includes(toolName) ||
-    gatingStatus.allowTools.includes(toolName)
-  ) {
-    return "[ ]";
-  }
-  if (
-    (toolName === "write" || toolName === "edit") &&
-    gatingStatus.allowWriteDir.length > 0
-  ) {
-    return "[*]";
-  }
-  return "[-]";
+export function getGatingStatusMarker(gatingStatus: GatingToolStatus): GatingStatusMarker {
+  if (gatingStatus.unrestricted) return "[ ]";
+  return gatingStatus.hasAllowedWriteDir ? "[*]" : "[-]";
 }
 
 /** Format the complete status listing in the supplied Pi tool order. */
 export function formatToolStatus(
   toolStatus: readonly ToolStatusSnapshot[],
-  gatingStatus: GatingStatusSnapshot,
+  readGatingStatus: GatingStatusReader,
 ): string {
   return toolStatus
     .map((tool) => {
       const enabled = tool.enabled ? "[+]" : "[ ]";
-      const marker = getGatingStatusMarker(tool.name, gatingStatus);
+      const marker = getGatingStatusMarker(readGatingStatus(tool.name));
       const kind = tool.builtIn ? " (built-in)" : "";
       return `${enabled}${marker} ${tool.name}${kind}`;
     })
@@ -71,7 +49,7 @@ export function register(
     description: "Show all tool and gating status",
     handler: async (args, ctx) => {
       if (rejectUnexpectedArgs(args, "/ptsw-status", ctx)) return;
-      ctx.ui.notify(formatToolStatus(readToolStatus(), readGatingStatus()), "info");
+      ctx.ui.notify(formatToolStatus(readToolStatus(), readGatingStatus), "info");
     },
   });
 }

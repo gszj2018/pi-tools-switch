@@ -24,27 +24,45 @@ const MODE_STATUS_BAR_KEY = "pi-tools-switch-mode";
 
 export const EXIT_MODE_TOOL_NAME = "exit_mode";
 
-/** Immutable data needed to report the active mode's tool permissions. */
-export interface GatingStatusSnapshot {
-  readonly activeModeName: string | null;
-  readonly allowTools: readonly string[];
-  readonly allowWriteDir: readonly string[];
+/** Immutable, derived gate status for a single tool. */
+export interface GatingToolStatus {
+  readonly unrestricted: boolean;
+  readonly hasAllowedWriteDir: boolean;
 }
 
-/** Read-only accessor for a fresh snapshot of the current gating state. */
-export type GatingStatusReader = () => GatingStatusSnapshot;
+/** Read-only accessor for the derived gating status of a named tool. */
+export type GatingStatusReader = (toolName: string) => GatingToolStatus;
 
 /**
- * Create a fresh immutable snapshot from gating state. The function is pure:
- * it does not mutate or retain the supplied mode data.
+ * Return whether a tool is allowed without a write/edit path check. This pure
+ * function deliberately leaves allowWriteDir handling to its caller.
  */
-export function getGatingStatus(
-  activeModeName: string | null,
+export function isToolUnrestricted(
+  toolName: string,
+  activeMode: Pick<GatingModeConfig, "allowTools"> | null,
+): boolean {
+  if (!activeMode) return true;
+  return (
+    toolName === EXIT_MODE_TOOL_NAME ||
+    READ_ONLY_TOOLS.includes(toolName) ||
+    activeMode.allowTools.includes(toolName)
+  );
+}
+
+/**
+ * Create an immutable derived status for one tool. The function is pure: it
+ * does not mutate or retain the supplied mode data.
+ */
+export function getGatingToolStatus(
+  toolName: string,
   activeMode: Pick<GatingModeConfig, "allowTools" | "allowWriteDir"> | null,
-): GatingStatusSnapshot {
-  const allowTools = Object.freeze([...(activeMode?.allowTools ?? [])]);
-  const allowWriteDir = Object.freeze([...(activeMode?.allowWriteDir ?? [])]);
-  return Object.freeze({ activeModeName, allowTools, allowWriteDir });
+): GatingToolStatus {
+  const unrestricted = isToolUnrestricted(toolName, activeMode);
+  const hasAllowedWriteDir =
+    !unrestricted &&
+    (toolName === "write" || toolName === "edit") &&
+    (activeMode?.allowWriteDir.length ?? 0) > 0;
+  return Object.freeze({ unrestricted, hasAllowedWriteDir });
 }
 
 export const EXIT_MODE_PROMPT_SNIPPET =
@@ -209,9 +227,7 @@ export function decideToolCall(
   cwd: string,
 ): GatingDecision {
   if (!mode || !modeName) return { allowed: true };
-  if (toolName === EXIT_MODE_TOOL_NAME) return { allowed: true };
-  if (READ_ONLY_TOOLS.includes(toolName)) return { allowed: true };
-  if (mode.allowTools.includes(toolName)) return { allowed: true };
+  if (isToolUnrestricted(toolName, mode)) return { allowed: true };
   if (toolName === "write" || toolName === "edit") {
     const path = (input as { path?: unknown } | undefined)?.path;
     if (typeof path === "string" && isPathInDirs(path, mode.allowWriteDir, cwd)) {
@@ -240,7 +256,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
   // input) must not change the mode.
   let modeGuardActive = false;
 
-  const readGatingStatus: GatingStatusReader = () => getGatingStatus(activeModeName, activeMode);
+  const readGatingStatus: GatingStatusReader = (toolName) =>
+    getGatingToolStatus(toolName, activeMode);
 
   const refreshStatus = (ctx: ExtensionContext): void => {
     ctx.ui.setStatus(MODE_STATUS_BAR_KEY, formatModeStatus(lastReportedModeName, activeModeName));

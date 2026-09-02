@@ -13,7 +13,8 @@ import {
   buildModeMessage,
   decideToolCall,
   formatModeStatus,
-  getGatingStatus,
+  getGatingToolStatus,
+  isToolUnrestricted,
   matchAnyTrigger,
   matchTrigger,
   mergeGatingExitTriggers,
@@ -274,37 +275,45 @@ test("decideToolCall blocks write with missing or non-string path", () => {
   assert.equal(d2.allowed, false);
 });
 
-test("getGatingStatus returns a fresh immutable snapshot without retaining mode data", () => {
-  const mode = { trigger: ["REVIEW:"], allowTools: ["bash"], allowWriteDir: ["docs"] };
-  const snapshot = getGatingStatus("review", mode);
+test("isToolUnrestricted follows direct gate permissions without checking paths", () => {
+  const mode = { trigger: ["REVIEW:"], allowTools: ["bash", "external_tool"], allowWriteDir: ["docs"] };
 
-  assert.deepEqual(snapshot, {
-    activeModeName: "review",
-    allowTools: ["bash"],
-    allowWriteDir: ["docs"],
-  });
-  assert.ok(Object.isFrozen(snapshot));
-  assert.ok(Object.isFrozen(snapshot.allowTools));
-  assert.ok(Object.isFrozen(snapshot.allowWriteDir));
-  assert.notEqual(getGatingStatus("review", mode), snapshot);
+  assert.equal(isToolUnrestricted("anything", null), true);
+  for (const toolName of ["exit_mode", "read", "find", "grep", "ls", "bash", "external_tool"]) {
+    assert.equal(isToolUnrestricted(toolName, mode), true, toolName);
+  }
+  for (const toolName of ["write", "edit", "powershell", "other_tool"]) {
+    assert.equal(isToolUnrestricted(toolName, mode), false, toolName);
+  }
+});
+
+test("getGatingToolStatus returns fresh immutable derived results", () => {
+  const mode = { trigger: ["REVIEW:"], allowTools: ["bash", "write"], allowWriteDir: ["docs"] };
+  const pathRestricted = getGatingToolStatus("edit", mode);
+
+  assert.deepEqual(pathRestricted, { unrestricted: false, hasAllowedWriteDir: true });
+  assert.ok(Object.isFrozen(pathRestricted));
+  assert.notEqual(getGatingToolStatus("edit", mode), pathRestricted);
   assert.throws(() => {
-    (snapshot as { activeModeName: string | null }).activeModeName = null;
+    (pathRestricted as { unrestricted: boolean }).unrestricted = true;
   });
-  assert.throws(() => (snapshot.allowTools as unknown as string[]).push("powershell"));
-  assert.throws(() => (snapshot.allowWriteDir as unknown as string[]).push("outside"));
 
-  mode.allowTools.push("powershell");
-  mode.allowWriteDir.push("other");
-  assert.deepEqual(snapshot, {
-    activeModeName: "review",
-    allowTools: ["bash"],
-    allowWriteDir: ["docs"],
+  assert.deepEqual(getGatingToolStatus("write", mode), {
+    unrestricted: true,
+    hasAllowedWriteDir: false,
   });
-  assert.deepEqual(getGatingStatus(null, null), {
-    activeModeName: null,
-    allowTools: [],
-    allowWriteDir: [],
+  assert.deepEqual(getGatingToolStatus("powershell", mode), {
+    unrestricted: false,
+    hasAllowedWriteDir: false,
   });
+  assert.deepEqual(getGatingToolStatus("anything", null), {
+    unrestricted: true,
+    hasAllowedWriteDir: false,
+  });
+
+  mode.allowTools.push("edit");
+  mode.allowWriteDir.length = 0;
+  assert.deepEqual(pathRestricted, { unrestricted: false, hasAllowedWriteDir: true });
 });
 
 test("formatModeStatus renders matching and pending reported states", () => {

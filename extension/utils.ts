@@ -4,7 +4,6 @@
  */
 import { homedir } from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   isPathInDirs as isPathInDirsWithRuntime,
   resolveDir as resolveDirWithRuntime,
@@ -17,7 +16,6 @@ const DEFAULT_PATH_RUNTIME: PathRuntime = {
   join: path.join,
   relative: path.relative,
   resolve: path.resolve,
-  fileURLToPath,
   homeDir: homedir(),
 };
 

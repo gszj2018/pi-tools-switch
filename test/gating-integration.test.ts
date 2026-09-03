@@ -10,7 +10,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as path from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   EXIT_MODE_PROMPT_GUIDELINES,
   EXIT_MODE_PROMPT_SNIPPET,
@@ -29,8 +28,6 @@ const CWD = process.platform === "win32" ? "D:\\workspace\\proj" : "/workspace/p
 const PLANS_DIR = path.resolve(CWD, ".agents", "plans");
 const PLAN_FILE = path.join(PLANS_DIR, "plan.md");
 const OUTSIDE_FILE = path.resolve(CWD, "src", "file.ts");
-const PLAN_FILE_URL = pathToFileURL(PLAN_FILE).href;
-const OUTSIDE_FILE_URL = pathToFileURL(OUTSIDE_FILE).href;
 
 type Handler = (event: unknown, ctx: unknown) => unknown;
 
@@ -513,7 +510,7 @@ test("tools explicitly included in allowTools are allowed", async () => {
   }
 });
 
-test("write allowWriteDir gating honors Pi @ paths and strict directory descendants", async () => {
+test("write allowWriteDir gating enforces strict directory descendants", async () => {
   const { emit } = setup();
   await emit("session_start");
   await emit("input", { text: "/plan-mode" });
@@ -523,11 +520,6 @@ test("write allowWriteDir gating honors Pi @ paths and strict directory descenda
     input: { path: PLAN_FILE, content: "# Plan\n" },
   });
   assert.equal(inDir, undefined, "write inside allowWriteDir should pass");
-  const atPrefixedPath = await emit("tool_call", {
-    toolName: "write",
-    input: { path: "@.agents/plans/plan.md", content: "# Plan\n" },
-  });
-  assert.equal(atPrefixedPath, undefined, "write should strip one leading @ before gating");
   const directoryPath = blocked(
     await emit("tool_call", {
       toolName: "write",
@@ -544,7 +536,7 @@ test("write allowWriteDir gating honors Pi @ paths and strict directory descenda
   assert.ok(outDir, "write outside allowWriteDir should be blocked");
 });
 
-test("edit allowWriteDir gating honors Pi @ paths and strict directory descendants", async () => {
+test("edit allowWriteDir gating enforces strict directory descendants", async () => {
   const { emit } = setup();
   await emit("session_start");
   await emit("input", { text: "/plan-mode" });
@@ -557,14 +549,6 @@ test("edit allowWriteDir gating honors Pi @ paths and strict directory descendan
     },
   });
   assert.equal(inDir, undefined, "edit inside allowWriteDir should pass");
-  const atPrefixedPath = await emit("tool_call", {
-    toolName: "edit",
-    input: {
-      path: "@.agents/plans/plan.md",
-      edits: [{ oldText: "old", newText: "new" }],
-    },
-  });
-  assert.equal(atPrefixedPath, undefined, "edit should strip one leading @ before gating");
   const directoryPath = blocked(
     await emit("tool_call", {
       toolName: "edit",
@@ -581,51 +565,26 @@ test("edit allowWriteDir gating honors Pi @ paths and strict directory descendan
   assert.ok(outDir, "edit outside allowWriteDir should be blocked");
 });
 
-test("write and edit file URL paths are gated and malformed URLs fail closed", async () => {
+test("write and edit unsupported paths are blocked by gating", async () => {
   const { emit } = setup();
   await emit("session_start");
   await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
 
-  const writeAllowed = await emit("tool_call", {
-    toolName: "write",
-    input: { path: PLAN_FILE_URL, content: "# Plan\n" },
-  });
-  assert.equal(writeAllowed, undefined, "write file URL inside allowWriteDir should pass");
-  const writeOutside = blocked(
-    await emit("tool_call", {
-      toolName: "write",
-      input: { path: OUTSIDE_FILE_URL, content: "# Plan\n" },
-    }),
-  );
-  assert.ok(writeOutside, "write file URL outside allowWriteDir should be blocked");
-  const writeMalformed = blocked(
-    await emit("tool_call", {
-      toolName: "write",
-      input: { path: "file:///%ZZ", content: "# Plan\n" },
-    }),
-  );
-  assert.ok(writeMalformed, "write malformed file URL should fail closed");
-
-  const editAllowed = await emit("tool_call", {
-    toolName: "edit",
-    input: { path: PLAN_FILE_URL, edits: [{ oldText: "old", newText: "new" }] },
-  });
-  assert.equal(editAllowed, undefined, "edit file URL inside allowWriteDir should pass");
-  const editOutside = blocked(
-    await emit("tool_call", {
-      toolName: "edit",
-      input: { path: OUTSIDE_FILE_URL, edits: [{ oldText: "old", newText: "new" }] },
-    }),
-  );
-  assert.ok(editOutside, "edit file URL outside allowWriteDir should be blocked");
-  const editMalformed = blocked(
-    await emit("tool_call", {
-      toolName: "edit",
-      input: { path: "file:///%ZZ", edits: [{ oldText: "old", newText: "new" }] },
-    }),
-  );
-  assert.ok(editMalformed, "edit malformed file URL should fail closed");
+  for (const pathCase of [
+    { path: "@.agents/plans/plan.md", name: "leading-@" },
+    { path: "file:///workspace/proj/.agents/plans/plan.md", name: "file URL" },
+  ]) {
+    for (const toolName of ["write", "edit"] as const) {
+      const input =
+        toolName === "write"
+          ? { path: pathCase.path, content: "# Plan\n" }
+          : { path: pathCase.path, edits: [{ oldText: "old", newText: "new" }] };
+      const result = blocked(await emit("tool_call", { toolName, input }));
+      assert.ok(result, `${toolName} ${pathCase.name} path should be blocked`);
+      assert.match(result.reason ?? "", /In plan mode, file modification is not allowed/);
+    }
+  }
 });
 
 // --- D. exit_mode validation and execute responses --------------------------

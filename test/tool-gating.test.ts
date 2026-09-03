@@ -4,7 +4,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as path from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   BUILTIN_GATING_EXIT_TRIGGERS,
   BUILTIN_GATING_MODES,
@@ -28,8 +27,6 @@ const PLANS_DIR = path.resolve(CWD, ".agents", "plans");
 const PLAN_FILE = path.join(PLANS_DIR, "plan.md");
 const NESTED_PLAN_FILE = path.join(PLANS_DIR, "nested", "plan.md");
 const OUTSIDE_FILE = path.resolve(CWD, "src", "file.ts");
-const PLAN_FILE_URL = pathToFileURL(PLAN_FILE).href;
-const OUTSIDE_FILE_URL = pathToFileURL(OUTSIDE_FILE).href;
 const PARENT_DIR = path.resolve(PLANS_DIR, "..");
 const ABS_PLANS_DIR = resolveDir(".agents/plans", CWD);
 const BUILTIN_PLAN = BUILTIN_GATING_MODES["plan"];
@@ -147,16 +144,19 @@ test("decideToolCall allows write/edit strictly inside allowWriteDir", () => {
   }
 });
 
-test("decideToolCall gates normal file URLs and fails closed for malformed URLs", () => {
+test("decideToolCall blocks unsupported tool paths", () => {
+  const paths = [
+    "plans\u00A0plan.md",
+    "@.agents/plans/plan.md",
+    "~/plans/plan.md",
+    "file:///workspace/proj/.agents/plans/plan.md",
+  ];
   for (const tool of ["write", "edit"]) {
-    const allowed = decideToolCall(tool, { path: PLAN_FILE_URL }, "plan", BUILTIN_PLAN, CWD);
-    assert.equal(allowed.allowed, true, `${tool} file URL inside allowWriteDir should be allowed`);
-
-    const blocked = decideToolCall(tool, { path: OUTSIDE_FILE_URL }, "plan", BUILTIN_PLAN, CWD);
-    assert.equal(blocked.allowed, false, `${tool} file URL outside allowWriteDir should be blocked`);
-
-    const malformed = decideToolCall(tool, { path: "file:///%ZZ" }, "plan", BUILTIN_PLAN, CWD);
-    assert.equal(malformed.allowed, false, `${tool} malformed file URL should fail closed`);
+    for (const path of paths) {
+      const decision = decideToolCall(tool, { path }, "plan", BUILTIN_PLAN, CWD);
+      assert.equal(decision.allowed, false, `${tool}: ${path}`);
+      assert.match(decision.reason ?? "", /In plan mode, file modification is not allowed/);
+    }
   }
 });
 
@@ -167,34 +167,18 @@ test("decideToolCall blocks write/edit paths equal to allowWriteDir", () => {
   }
 });
 
-test("decideToolCall strips one leading @ from write/edit paths only", () => {
-  for (const tool of ["write", "edit"]) {
-    const allowed = decideToolCall(
-      tool,
-      { path: "@.agents/plans/plan.md" },
-      "plan",
-      BUILTIN_PLAN,
-      CWD,
-    );
-    assert.equal(allowed.allowed, true, `${tool} should strip one leading @ from its path`);
-
-    const blocked = decideToolCall(
-      tool,
-      { path: "@@.agents/plans/plan.md" },
-      "plan",
-      BUILTIN_PLAN,
-      CWD,
-    );
-    assert.equal(blocked.allowed, false, `${tool} should retain a second leading @ in its path`);
-  }
-});
-
-test("decideToolCall does not strip a leading @ from allowWriteDir configuration", () => {
+test("decideToolCall preserves literal @ in allowWriteDir configuration", () => {
   const mode = { trigger: ["X:"], allowTools: [], allowWriteDir: ["@.agents/plans"] };
   const ordinaryPath = decideToolCall("write", { path: ".agents/plans/plan.md" }, "x", mode, CWD);
   assert.equal(ordinaryPath.allowed, false);
 
-  const literalAtPath = decideToolCall("write", { path: "@@.agents/plans/plan.md" }, "x", mode, CWD);
+  const literalAtPath = decideToolCall(
+    "write",
+    { path: path.join(CWD, "@.agents", "plans", "plan.md") },
+    "x",
+    mode,
+    CWD,
+  );
   assert.equal(literalAtPath.allowed, true);
 });
 

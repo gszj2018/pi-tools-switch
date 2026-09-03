@@ -2,15 +2,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { posix, win32 } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   isPathInDirs as isPathInDirsWithRuntime,
-  normalizeWindowsShellPath,
   resolveDir as resolveDirWithRuntime,
   resolveToolPath,
   type PathRuntime,
 } from "../extension/utils-path.ts";
-import { isPathInDirs } from "../extension/utils.ts";
 
 function createRuntime(
   platform: NodeJS.Platform,
@@ -23,7 +20,6 @@ function createRuntime(
     join: pathApi.join,
     relative: pathApi.relative,
     resolve: pathApi.resolve,
-    fileURLToPath: (url) => fileURLToPath(url, { windows: platform === "win32" }),
     homeDir,
   };
 }
@@ -38,87 +34,70 @@ const PATH_CASES = [
     name: "win32",
     runtime: WINDOWS_RUNTIME,
     cwd: WINDOWS_CWD,
-    relativeInput: "@docs\u00A0plans\\plan.md",
-    relativeOutput: "D:\\workspace\\proj\\docs plans\\plan.md",
-    tildeInput: "~/plans/plan.md",
-    tildeOutput: "C:\\Users\\test\\plans\\plan.md",
-    fileUrl: "file:///D:/workspace/proj/.agents/plans/plan.md",
-    fileUrlOutput: "D:\\workspace\\proj\\.agents\\plans\\plan.md",
-    allowedDir: "D:\\workspace\\proj\\.agents\\plans",
-    outsideFileUrl: "file:///D:/workspace/proj/README.md",
+    relativeInput: "docs/plans/plan.md",
+    relativeOutput: "D:\\workspace\\proj\\docs\\plans\\plan.md",
+    absoluteInput: "D:\\workspace\\shared\\plan.md",
   },
   {
     name: "posix",
     runtime: POSIX_RUNTIME,
     cwd: POSIX_CWD,
-    relativeInput: "@docs\u00A0plans/plan.md",
-    relativeOutput: "/workspace/proj/docs plans/plan.md",
-    tildeInput: "~/plans/plan.md",
-    tildeOutput: "/home/test/plans/plan.md",
-    fileUrl: "file:///workspace/proj/.agents/plans/plan.md",
-    fileUrlOutput: "/workspace/proj/.agents/plans/plan.md",
-    allowedDir: "/workspace/proj/.agents/plans",
-    outsideFileUrl: "file:///workspace/proj/README.md",
+    relativeInput: "docs/plans/plan.md",
+    relativeOutput: "/workspace/proj/docs/plans/plan.md",
+    absoluteInput: "/workspace/shared/plan.md",
   },
 ] as const;
 
-test("Pi-compatible tool input rules apply on both win32 and posix platforms", () => {
+test("regular tool paths resolve on both win32 and posix platforms", () => {
   for (const pathCase of PATH_CASES) {
     assert.equal(
       resolveToolPath(pathCase.relativeInput, pathCase.cwd, pathCase.runtime),
       pathCase.relativeOutput,
-      `${pathCase.name} normalizes Unicode spaces and one leading @`,
+      `${pathCase.name} resolves relative paths`,
     );
     assert.equal(
-      resolveToolPath(pathCase.tildeInput, pathCase.cwd, pathCase.runtime),
-      pathCase.tildeOutput,
-      `${pathCase.name} expands ~/`,
-    );
-    assert.equal(
-      resolveToolPath(pathCase.fileUrl, pathCase.cwd, pathCase.runtime),
-      pathCase.fileUrlOutput,
-      `${pathCase.name} resolves file URLs`,
+      resolveToolPath(pathCase.absoluteInput, pathCase.cwd, pathCase.runtime),
+      pathCase.absoluteInput,
+      `${pathCase.name} resolves absolute paths`,
     );
   }
 });
 
-test("file URL paths are gated on both win32 and posix platforms", () => {
+test("tool paths reject Pi-specific formats on both win32 and posix platforms", () => {
+  const unsupportedCases = [
+    { input: "docs\u00A0plans/plan.md", name: "Unicode-space" },
+    { input: "@docs/plans/plan.md", name: "leading-@" },
+    { input: "~/plans/plan.md", name: "home-path" },
+    { input: "file:///workspace/proj/.agents/plans/plan.md", name: "file:// URL" },
+  ];
   for (const pathCase of PATH_CASES) {
-    assert.equal(
-      isPathInDirsWithRuntime(pathCase.fileUrl, [pathCase.allowedDir], pathCase.cwd, pathCase.runtime),
-      true,
-      `${pathCase.name} allows a file URL below an allowed directory`,
-    );
-    assert.equal(
-      isPathInDirsWithRuntime(pathCase.outsideFileUrl, [pathCase.allowedDir], pathCase.cwd, pathCase.runtime),
-      false,
-      `${pathCase.name} rejects a file URL outside an allowed directory`,
-    );
+    for (const unsupportedCase of unsupportedCases) {
+      assert.throws(
+        () => resolveToolPath(unsupportedCase.input, pathCase.cwd, pathCase.runtime),
+        new Error(`${unsupportedCase.name} is not supported in current mode`),
+      );
+    }
   }
 });
 
-test("Windows runtime converts supported Pi shell paths only", () => {
-  assert.equal(normalizeWindowsShellPath("/c/Users/test/file.md", WINDOWS_RUNTIME), "C:\\Users\\test\\file.md");
-  assert.equal(normalizeWindowsShellPath("/mnt/d/work/file.md", WINDOWS_RUNTIME), "D:\\work\\file.md");
-  assert.equal(normalizeWindowsShellPath("/cygdrive/e/work/file.md", WINDOWS_RUNTIME), "E:\\work\\file.md");
-  assert.equal(normalizeWindowsShellPath("//server/share/file.md", WINDOWS_RUNTIME), "//server/share/file.md");
-  assert.equal(normalizeWindowsShellPath("/d\\mixed/path.md", WINDOWS_RUNTIME), "/d\\mixed/path.md");
-
-  assert.equal(
-    resolveToolPath("@/mnt/d/work/plan.md", WINDOWS_CWD, WINDOWS_RUNTIME),
-    "D:\\work\\plan.md",
-  );
-  assert.equal(resolveToolPath("~\\", WINDOWS_CWD, WINDOWS_RUNTIME), "C:\\Users\\test");
-  assert.equal(
-    resolveToolPath("~\\plans\\plan.md", WINDOWS_CWD, WINDOWS_RUNTIME),
-    "C:\\Users\\test\\plans\\plan.md",
+test("Windows runtime rejects WSL, Cygwin, MSYS2, and backslash home paths", () => {
+  for (const input of ["/c/Users/test/file.md", "/mnt/d/work/file.md", "/cygdrive/e/work/file.md"]) {
+    assert.throws(
+      () => resolveToolPath(input, WINDOWS_CWD, WINDOWS_RUNTIME),
+      new Error("WSL/Cygwin/MSYS2 shell-style is not supported in current mode"),
+    );
+  }
+  assert.throws(
+    () => resolveToolPath("~\\plans\\plan.md", WINDOWS_CWD, WINDOWS_RUNTIME),
+    new Error("home-path is not supported in current mode"),
   );
 });
 
-test("POSIX runtime does not apply Windows-only shell path or tilde rules", () => {
-  assert.equal(normalizeWindowsShellPath("/mnt/d/work/plan.md", POSIX_RUNTIME), "/mnt/d/work/plan.md");
-  assert.equal(resolveToolPath("/mnt/d/work/plan.md", POSIX_CWD, POSIX_RUNTIME), "/mnt/d/work/plan.md");
-  assert.equal(resolveToolPath("~\\plans\\plan.md", POSIX_CWD, POSIX_RUNTIME), "/workspace/proj/~\\plans\\plan.md");
+test("POSIX runtime does not reject Windows-only shell paths", () => {
+  assert.equal(
+    resolveToolPath("/mnt/d/work/plan.md", POSIX_CWD, POSIX_RUNTIME),
+    "/mnt/d/work/plan.md",
+  );
 });
 
 test("Win32 runtime supports native paths, UNC paths, cross-drive denial, and drive-case matching", () => {
@@ -210,6 +189,46 @@ test("allowWriteDir comparison is strict on both win32 and posix platforms", () 
   }
 });
 
+test("relative tool paths with dot segments are gated on both win32 and posix platforms", () => {
+  const cases = [
+    { name: "win32", runtime: WINDOWS_RUNTIME, cwd: WINDOWS_CWD },
+    { name: "posix", runtime: POSIX_RUNTIME, cwd: POSIX_CWD },
+  ] as const;
+
+  for (const pathCase of cases) {
+    assert.equal(
+      isPathInDirsWithRuntime(
+        ".agents/plans/nested/../plan.md",
+        [".agents/plans"],
+        pathCase.cwd,
+        pathCase.runtime,
+      ),
+      true,
+      `${pathCase.name} allows a relative path with .. that remains inside`,
+    );
+    assert.equal(
+      isPathInDirsWithRuntime(
+        ".agents/plans/./plan.md",
+        [".agents/plans"],
+        pathCase.cwd,
+        pathCase.runtime,
+      ),
+      true,
+      `${pathCase.name} allows a relative path with . inside`,
+    );
+    assert.equal(
+      isPathInDirsWithRuntime(
+        ".agents/plans/../../README.md",
+        [".agents/plans"],
+        pathCase.cwd,
+        pathCase.runtime,
+      ),
+      false,
+      `${pathCase.name} rejects a relative path with .. outside`,
+    );
+  }
+});
+
 test("resolveDir resolves configuration paths on both win32 and posix platforms", () => {
   const cases = [
     {
@@ -252,12 +271,12 @@ test("allowWriteDir configuration keeps its literal @ prefix", () => {
     false,
   );
   assert.equal(
-    isPathInDirsWithRuntime("@@plans/plan.md", ["@plans"], WINDOWS_CWD, WINDOWS_RUNTIME),
+    isPathInDirsWithRuntime(
+      "D:\\workspace\\proj\\@plans\\plan.md",
+      ["@plans"],
+      WINDOWS_CWD,
+      WINDOWS_RUNTIME,
+    ),
     true,
   );
-});
-
-test("path implementation is exception-transparent and public gating fails closed", () => {
-  assert.throws(() => isPathInDirsWithRuntime("file:///%ZZ", ["plans"], POSIX_CWD, POSIX_RUNTIME));
-  assert.equal(isPathInDirs("file:///%ZZ", ["plans"], POSIX_CWD), false);
 });

@@ -10,72 +10,51 @@ export interface PathRuntime {
   readonly join: (...paths: string[]) => string;
   readonly relative: (from: string, to: string) => string;
   readonly resolve: (...paths: string[]) => string;
-  readonly fileURLToPath: (url: string | URL) => string;
   readonly homeDir: string;
 }
 
-const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g;
+const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/;
 
-interface NormalizePathOptions {
-  readonly normalizeUnicodeSpaces?: boolean;
-  readonly stripAtPrefix?: boolean;
+function isWindowsShellPath(input: string, runtime: PathRuntime): boolean {
+  return (
+    runtime.platform === "win32" &&
+    input.startsWith("/") &&
+    !input.startsWith("//") &&
+    !input.includes("\\") &&
+    /^\/(?:mnt\/|cygdrive\/)?[a-z](?:\/.*)?$/i.test(input)
+  );
 }
 
-/** Convert supported Windows shell drive paths to native Windows paths. */
-export function normalizeWindowsShellPath(filePath: string, runtime: PathRuntime): string {
+function unsupportedPath(pathCase: string): never {
+  throw new Error(`${pathCase} is not supported in current mode`);
+}
+
+/** Validate a write/edit tool path without applying Pi-specific conversions. */
+function normalizePath(input: string, runtime: PathRuntime): string {
+  if (UNICODE_SPACES.test(input)) unsupportedPath("Unicode-space");
+  if (input.startsWith("@")) unsupportedPath("leading-@");
+  if (isWindowsShellPath(input, runtime)) unsupportedPath("WSL/Cygwin/MSYS2 shell-style");
   if (
-    runtime.platform !== "win32" ||
-    !filePath.startsWith("/") ||
-    filePath.startsWith("//") ||
-    filePath.includes("\\")
+    input === "~" ||
+    input.startsWith("~/") ||
+    (runtime.platform === "win32" && input.startsWith("~\\"))
   ) {
-    return filePath;
+    unsupportedPath("home-path");
   }
-  const match = filePath.match(/^\/(?:mnt\/|cygdrive\/)?([a-z])(?:\/(.*))?$/i);
-  if (!match) return filePath;
-  const suffix = match[2]?.replaceAll("/", "\\");
-  return `${match[1].toUpperCase()}:\\${suffix ?? ""}`;
+  if (/^file:\/\//.test(input)) unsupportedPath("file:// URL");
+  return input;
 }
 
-function normalizePath(
-  input: string,
+/** Resolve a regular absolute or relative write/edit tool path. */
+export function resolveToolPath(
+  target: string,
+  cwd: string,
   runtime: PathRuntime,
-  options: NormalizePathOptions = {},
 ): string {
-  let normalized = options.normalizeUnicodeSpaces ? input.replace(UNICODE_SPACES, " ") : input;
-  if (options.stripAtPrefix && normalized.startsWith("@")) {
-    normalized = normalized.slice(1);
-  }
-  normalized = normalizeWindowsShellPath(normalized, runtime);
-
-  if (normalized === "~") return runtime.homeDir;
-  if (
-    normalized.startsWith("~/") ||
-    (runtime.platform === "win32" && normalized.startsWith("~\\"))
-  ) {
-    return runtime.join(runtime.homeDir, normalized.slice(2));
-  }
-  if (/^file:\/\//.test(normalized)) {
-    return runtime.fileURLToPath(normalized);
-  }
-  return normalized;
-}
-
-/**
- * Resolve a write/edit tool path with Pi's resolveToCwd semantics.
- *
- * The target receives Pi's Unicode-space normalization and one leading `@`
- * removal. The base directory receives ordinary path normalization only.
- */
-export function resolveToolPath(target: string, cwd: string, runtime: PathRuntime): string {
-  const normalizedTarget = normalizePath(target, runtime, {
-    normalizeUnicodeSpaces: true,
-    stripAtPrefix: true,
-  });
-  const normalizedCwd = normalizePath(cwd, runtime);
+  const normalizedTarget = normalizePath(target, runtime);
   return runtime.isAbsolute(normalizedTarget)
     ? runtime.resolve(normalizedTarget)
-    : runtime.resolve(normalizedCwd, normalizedTarget);
+    : runtime.resolve(cwd, normalizedTarget);
 }
 
 /**
@@ -101,8 +80,8 @@ function isStrictDescendant(relativePath: string, runtime: PathRuntime): boolean
 
 /**
  * Return true only when a write/edit target is strictly inside an allowed
- * directory. Tool target paths follow Pi's resolveToCwd behavior; configured
- * directory entries retain their literal leading `@` and Unicode whitespace.
+ * directory. Tool target paths support only regular absolute and relative
+ * paths; configured directory entries retain their existing resolution rules.
  */
 export function isPathInDirs(
   target: string,

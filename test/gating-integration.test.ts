@@ -572,7 +572,9 @@ test("write and edit unsupported paths are blocked by gating", async () => {
   await emit("before_agent_start");
 
   for (const pathCase of [
+    { path: "plans\u00A0plan.md", name: "Unicode-space" },
     { path: "@.agents/plans/plan.md", name: "leading-@" },
+    { path: "~/plans/plan.md", name: "home-path" },
     { path: "file:///workspace/proj/.agents/plans/plan.md", name: "file URL" },
   ]) {
     for (const toolName of ["write", "edit"] as const) {

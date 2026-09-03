@@ -15,6 +15,12 @@ export interface PathRuntime {
 
 const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/;
 
+export const MSG_UNSUPPORTED_UNICODE_SPACE = "Unicode-space";
+export const MSG_UNSUPPORTED_LEADING_AT = "leading-@";
+export const MSG_UNSUPPORTED_WINDOWS_SHELL_STYLE = "WSL/Cygwin/MSYS2 shell-style";
+export const MSG_UNSUPPORTED_HOME_PATH = "home-path";
+export const MSG_UNSUPPORTED_FILE_URL = "file:// URL";
+
 function isWindowsShellPath(input: string, runtime: PathRuntime): boolean {
   return (
     runtime.platform === "win32" &&
@@ -31,17 +37,17 @@ function unsupportedPath(pathCase: string): never {
 
 /** Validate a write/edit tool path without applying Pi-specific conversions. */
 function normalizePath(input: string, runtime: PathRuntime): string {
-  if (UNICODE_SPACES.test(input)) unsupportedPath("Unicode-space");
-  if (input.startsWith("@")) unsupportedPath("leading-@");
-  if (isWindowsShellPath(input, runtime)) unsupportedPath("WSL/Cygwin/MSYS2 shell-style");
+  if (UNICODE_SPACES.test(input)) unsupportedPath(MSG_UNSUPPORTED_UNICODE_SPACE);
+  if (input.startsWith("@")) unsupportedPath(MSG_UNSUPPORTED_LEADING_AT);
+  if (isWindowsShellPath(input, runtime)) unsupportedPath(MSG_UNSUPPORTED_WINDOWS_SHELL_STYLE);
   if (
     input === "~" ||
     input.startsWith("~/") ||
     (runtime.platform === "win32" && input.startsWith("~\\"))
   ) {
-    unsupportedPath("home-path");
+    unsupportedPath(MSG_UNSUPPORTED_HOME_PATH);
   }
-  if (/^file:\/\//.test(input)) unsupportedPath("file:// URL");
+  if (/^file:\/\//.test(input)) unsupportedPath(MSG_UNSUPPORTED_FILE_URL);
   return input;
 }
 

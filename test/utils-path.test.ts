@@ -6,6 +6,11 @@ import {
   isPathInDirs as isPathInDirsWithRuntime,
   resolveDir as resolveDirWithRuntime,
   resolveToolPath,
+  MSG_UNSUPPORTED_FILE_URL,
+  MSG_UNSUPPORTED_HOME_PATH,
+  MSG_UNSUPPORTED_LEADING_AT,
+  MSG_UNSUPPORTED_UNICODE_SPACE,
+  MSG_UNSUPPORTED_WINDOWS_SHELL_STYLE,
   type PathRuntime,
 } from "../extension/utils-path.ts";
 
@@ -65,10 +70,10 @@ test("regular tool paths resolve on both win32 and posix platforms", () => {
 
 test("tool paths reject Pi-specific formats on both win32 and posix platforms", () => {
   const unsupportedCases = [
-    { input: "docs\u00A0plans/plan.md", name: "Unicode-space" },
-    { input: "@docs/plans/plan.md", name: "leading-@" },
-    { input: "~/plans/plan.md", name: "home-path" },
-    { input: "file:///workspace/proj/.agents/plans/plan.md", name: "file:// URL" },
+    { input: "docs\u00A0plans/plan.md", name: MSG_UNSUPPORTED_UNICODE_SPACE },
+    { input: "@docs/plans/plan.md", name: MSG_UNSUPPORTED_LEADING_AT },
+    { input: "~/plans/plan.md", name: MSG_UNSUPPORTED_HOME_PATH },
+    { input: "file:///workspace/proj/.agents/plans/plan.md", name: MSG_UNSUPPORTED_FILE_URL },
   ];
   for (const pathCase of PATH_CASES) {
     for (const unsupportedCase of unsupportedCases) {
@@ -84,12 +89,12 @@ test("Windows runtime rejects WSL, Cygwin, MSYS2, and backslash home paths", () 
   for (const input of ["/c/Users/test/file.md", "/mnt/d/work/file.md", "/cygdrive/e/work/file.md"]) {
     assert.throws(
       () => resolveToolPath(input, WINDOWS_CWD, WINDOWS_RUNTIME),
-      new Error("WSL/Cygwin/MSYS2 shell-style is not supported in current mode"),
+      new Error(`${MSG_UNSUPPORTED_WINDOWS_SHELL_STYLE} is not supported in current mode`),
     );
   }
   assert.throws(
     () => resolveToolPath("~\\plans\\plan.md", WINDOWS_CWD, WINDOWS_RUNTIME),
-    new Error("home-path is not supported in current mode"),
+    new Error(`${MSG_UNSUPPORTED_HOME_PATH} is not supported in current mode`),
   );
 });
 

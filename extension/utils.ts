@@ -67,12 +67,8 @@ export function resolveDir(spec: string, cwd: string): string {
 
 /**
  * Return true when a write/edit target lies strictly inside an allowed
- * directory, using Pi-compatible tool-input path handling.
+ * directory using regular tool-input path handling.
  */
 export function isPathInDirs(target: string, allowedDirs: readonly string[], cwd: string): boolean {
-  try {
-    return isPathInDirsWithRuntime(target, allowedDirs, cwd, DEFAULT_PATH_RUNTIME);
-  } catch {
-    return false;
-  }
+  return isPathInDirsWithRuntime(target, allowedDirs, cwd, DEFAULT_PATH_RUNTIME);
 }

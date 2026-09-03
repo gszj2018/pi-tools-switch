@@ -222,8 +222,12 @@ export function decideToolCall(
   if (isToolUnrestricted(toolName, mode)) return { allowed: true };
   if (toolName === "write" || toolName === "edit") {
     const path = (input as { path?: unknown } | undefined)?.path;
-    if (typeof path === "string" && isPathInDirs(path, mode.allowWriteDir, cwd)) {
-      return { allowed: true };
+    try {
+      if (typeof path === "string" && isPathInDirs(path, mode.allowWriteDir, cwd)) {
+        return { allowed: true };
+      }
+    } catch (error) {
+      return { allowed: false, reason: error instanceof Error ? error.message : String(error) };
     }
     return { allowed: false, reason: buildWriteReason(modeName, mode, cwd) };
   }

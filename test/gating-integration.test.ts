@@ -584,7 +584,7 @@ test("write and edit unsupported paths are blocked by gating", async () => {
           : { path: pathCase.path, edits: [{ oldText: "old", newText: "new" }] };
       const result = blocked(await emit("tool_call", { toolName, input }));
       assert.ok(result, `${toolName} ${pathCase.name} path should be blocked`);
-      assert.match(result.reason ?? "", /In plan mode, file modification is not allowed/);
+      assert.match(result.reason ?? "", /is not supported in current mode/);
     }
   }
 });

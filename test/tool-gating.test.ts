@@ -155,7 +155,7 @@ test("decideToolCall blocks unsupported tool paths", () => {
     for (const path of paths) {
       const decision = decideToolCall(tool, { path }, "plan", BUILTIN_PLAN, CWD);
       assert.equal(decision.allowed, false, `${tool}: ${path}`);
-      assert.match(decision.reason ?? "", /In plan mode, file modification is not allowed/);
+      assert.match(decision.reason ?? "", /is not supported in current mode/);
     }
   }
 });

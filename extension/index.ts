@@ -3,9 +3,9 @@
  *
  * Loads the config at startup (falling back to defaults on failure), and
  * injects the getConfig callback into each feature module. Runs the subagent
- * detection once at the factory layer: inside a subagent only the tool-gating
- * module's inactive-gating prompt is registered, while built-in tool
- * management and actual gating are skipped. Feature modules own their state,
+ * detection once at the factory layer: inside a subagent the extension is completely inert
+ * (no tools, commands, event handlers, or system-prompt injections are registered), while
+ * built-in tool management and actual gating are skipped. Feature modules own their state,
  * status bars, and notifications independently; all text feedback goes
  * through ctx.ui.notify.
  */
@@ -14,10 +14,7 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { CONFIG_FILE_NAME, DEFAULT_CONFIG, loadConfigFrom, type Config } from "./config.ts";
 import { isSubagentEnv } from "./subagent-support.ts";
 import { register as registerBuiltinTools } from "./builtin-tools.ts";
-import {
-  register as registerToolGating,
-  registerForSubagent,
-} from "./tool-gating.ts";
+import { register as registerToolGating } from "./tool-gating.ts";
 import { register as registerToolStatus } from "./tool-status.ts";
 
 // noinspection JSUnusedGlobalSymbols
@@ -43,10 +40,9 @@ export default async function (pi: ExtensionAPI): Promise<void> {
   const getConfig = (): Config => config;
 
   // Subagent detection runs once at the factory layer. Inside a subagent,
-  // built-in tool management and actual gating are skipped; only the fixed
-  // inactive-gating system-prompt notice is registered.
+  // the extension is completely inert: no tools, commands, event handlers,
+  // status bars, or system-prompt injections are registered.
   if (isSubagentEnv(process.env, config.subagentEnvVars)) {
-    registerForSubagent(pi);
     return;
   }
 

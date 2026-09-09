@@ -22,127 +22,28 @@ import {
   MODE_MESSAGE_CUSTOM_TYPE,
   MODE_TRIGGER_CUSTOM_TYPE,
 } from "../extension/tool-gating-replay.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createMockCtx as createSharedMockCtx, type MockCtxOptions } from "./helpers/ctx.mock.ts";
+import { createMockPi } from "./helpers/pi.mock.ts";
 
 const CWD = process.platform === "win32" ? "D:\\workspace\\proj" : "/workspace/proj";
 const PLANS_DIR = path.resolve(CWD, ".agents", "plans");
 const PLAN_FILE = path.join(PLANS_DIR, "plan.md");
 const OUTSIDE_FILE = path.resolve(CWD, "src", "file.ts");
 
-type Handler = (event: unknown, ctx: unknown) => unknown;
-
-interface MockUi {
-  setStatus: () => void;
-  notify: (text: string, level?: string) => void;
-  select: () => Promise<string>;
-  input: () => Promise<string>;
-}
-
 /** A minimal extension context with a configurable UI and active branch. */
-function createMockCtx(
-  overrides: {
-    cwd?: string;
-    hasUI?: boolean;
-    ui?: Partial<MockUi>;
-    branch?: unknown[];
-    branchError?: Error;
-  } = {},
-): ExtensionContext {
-  const baseUi: MockUi = {
-    setStatus: () => {},
-    notify: () => {},
-    select: async () => "Accept",
-    input: async () => "",
-  };
-  return {
-    cwd: overrides.cwd ?? CWD,
-    hasUI: overrides.hasUI ?? false,
-    ui: { ...baseUi, ...(overrides.ui ?? {}) },
-    sessionManager: {
-      getBranch: () => {
-        if (overrides.branchError) throw overrides.branchError;
-        return (overrides.branch ?? []) as never;
-      },
-    },
-  } as unknown as ExtensionContext;
-}
-
-interface RegisteredTool {
-  name: string;
-  label: string;
-  description: string;
-  promptSnippet?: string;
-  promptGuidelines?: string[];
-  executionMode?: string;
-  parameters: unknown;
-  execute: (...args: unknown[]) => Promise<unknown>;
-}
-
-interface MockPi {
-  on: (event: string, handler: Handler) => void;
-  emit: (event: string, eventData: unknown, ctx: unknown) => Promise<unknown>;
-  getActiveTools: () => string[];
-  setActiveTools: (tools: string[]) => void;
-  registerTool: (def: RegisteredTool) => void;
-  registerCommand: () => void;
-  appendEntry: (customType: string, data?: unknown) => void;
-  registerEntryRenderer: (customType: string, renderer: (entry: { data?: unknown }) => unknown) => void;
-}
-
-/** A mock pi capturing event handlers and tool registrations. */
-function createMockPi() {
-  const handlers: { event: string; handler: Handler }[] = [];
-  let activeTools: string[] = [];
-  const tools: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
-  const toolDefinitions: Record<string, RegisteredTool> = {};
-  const appendedEntries: Array<{ customType: string; data?: unknown }> = [];
-  const entryRenderers: Record<string, (entry: { data?: unknown }) => unknown> = {};
-  const pi = {
-    on(event: string, handler: Handler) {
-      handlers.push({ event, handler });
-    },
-    async emit(event: string, eventData: unknown, ctx: unknown) {
-      let result: unknown;
-      for (const h of handlers) {
-        if (h.event === event) result = await h.handler(eventData, ctx);
-      }
-      return result;
-    },
-    getActiveTools: () => [...activeTools],
-    setActiveTools: (next: string[]) => {
-      activeTools = [...next];
-    },
-    registerTool(def: RegisteredTool) {
-      tools[def.name] = def.execute;
-      toolDefinitions[def.name] = def;
-    },
-    registerCommand: () => {},
-    appendEntry(customType: string, data?: unknown) {
-      appendedEntries.push({ customType, data });
-    },
-    registerEntryRenderer(customType: string, renderer: (entry: { data?: unknown }) => unknown) {
-      entryRenderers[customType] = renderer;
-    },
-  } as MockPi;
-
-  return {
-    pi: pi as unknown as ExtensionAPI,
-    /** Fire an event with a fresh default context unless one is given. */
-    emit: (event: string, data: unknown = {}, ctx: unknown = createMockCtx()) =>
-      pi.emit(event, data, ctx),
-    activeTools: (): string[] => activeTools,
-    tools,
-    toolDefinitions,
-    appendedEntries,
-    entryRenderers,
-  };
+function createMockCtx(options: MockCtxOptions = {}): ExtensionContext {
+  return createSharedMockCtx({ cwd: CWD, ...options }).ctx;
 }
 
 /** Register the gating module against a fresh mock; returns the mock handles. */
 function setup(config: Config = DEFAULT_CONFIG) {
   const mock = createMockPi();
   const readGatingStatus = register(mock.pi, () => config);
-  return { ...mock, readGatingStatus };
+  /** Fire an event with a fresh default context unless one is given. */
+  const emit = (event: string, data: unknown = {}, ctx: unknown = createMockCtx()) =>
+    mock.emit(event, data, ctx);
+  return { ...mock, emit, readGatingStatus };
 }
 
 /** Extract the injected mode-state message from a before_agent_start result. */

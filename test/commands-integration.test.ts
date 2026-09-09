@@ -7,25 +7,12 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import { register as registerBuiltinTools } from "../extension/builtin-tools.ts";
 import { register as registerToolGating } from "../extension/tool-gating.ts";
 import { register as registerToolStatus } from "../extension/tool-status.ts";
 import { DEFAULT_CONFIG, type Config } from "../extension/config.ts";
-
-interface CommandDefinition {
-  description?: string;
-  getArgumentCompletions?: (prefix: string) => AutocompleteItem[] | null;
-  handler: (args: string, ctx: ExtensionCommandContext) => void | Promise<void>;
-}
-
-interface Notification {
-  message: string;
-  level?: string;
-}
-
-type EventHandler = (event: unknown, ctx: ExtensionCommandContext) => unknown | Promise<unknown>;
+import { createMockCtx, type MockNotification } from "./helpers/ctx.mock.ts";
+import { createMockPi } from "./helpers/pi.mock.ts";
 
 const TEST_CONFIG: Config = {
   ...DEFAULT_CONFIG,
@@ -52,85 +39,8 @@ const TARGET_COMMANDS = [
   "ptsw-status",
 ] as const;
 
-function createMockCtx() {
-  const notifications: Notification[] = [];
-  const statuses: { key: string; value: string | undefined }[] = [];
-  const ctx = {
-    cwd: "C:/project",
-    hasUI: false,
-    ui: {
-      notify(message: string, level?: string) {
-        notifications.push({ message, level });
-      },
-      setStatus(key: string, value: string | undefined) {
-        statuses.push({ key, value });
-      },
-      select: async () => undefined,
-      input: async () => undefined,
-    },
-  } as unknown as ExtensionCommandContext;
-  return { ctx, notifications, statuses };
-}
-
-function createMockPi(initialActiveTools: string[] = ["read", "external_tool"]) {
-  let activeTools = [...initialActiveTools];
-  const allToolNames = [
-    "read",
-    "write",
-    "edit",
-    "bash",
-    "powershell",
-    "find",
-    "grep",
-    "ls",
-    "external_tool",
-  ];
-  const commands = new Map<string, CommandDefinition>();
-  const eventHandlers = new Map<string, EventHandler[]>();
-
-  // noinspection JSUnusedGlobalSymbols
-  const pi = {
-    on(eventName: string, handler: EventHandler) {
-      const handlers = eventHandlers.get(eventName) ?? [];
-      handlers.push(handler);
-      eventHandlers.set(eventName, handlers);
-    },
-    registerCommand(name: string, definition: CommandDefinition) {
-      commands.set(name, definition);
-    },
-    registerTool(definition: { name: string }) {
-      if (!allToolNames.includes(definition.name)) allToolNames.push(definition.name);
-    },
-    registerEntryRenderer: () => {},
-    appendEntry: () => {},
-    getActiveTools: () => [...activeTools],
-    setActiveTools(next: string[]) {
-      activeTools = [...next];
-    },
-    getAllTools: () => allToolNames.map((name) => ({ name })),
-  };
-
-  return {
-    pi: pi as unknown as ExtensionAPI,
-    commands,
-    activeTools: () => [...activeTools],
-    setActiveTools(next: string[]) {
-      activeTools = [...next];
-    },
-    async emit(
-      eventName: string,
-      ctx: ExtensionCommandContext,
-      eventData: unknown = {},
-    ): Promise<void> {
-      for (const handler of eventHandlers.get(eventName) ?? []) {
-        await handler(eventData, ctx);
-      }
-    },
-  };
-}
-
 async function setup(config: Config = TEST_CONFIG) {
-  const mock = createMockPi();
+  const mock = createMockPi({ initialActiveTools: ["read", "external_tool"] });
   // Factory-phase registration registers commands and the exit_mode tool, but
   // action methods like setActiveTools only run once the session runtime is
   // initialized.
@@ -141,7 +51,7 @@ async function setup(config: Config = TEST_CONFIG) {
 
   // Real activation flow: session_start activates exit_mode and refreshes the
   // tool status bar before commands can run.
-  await mock.emit("session_start", context.ctx);
+  await mock.emit("session_start", {}, context.ctx);
 
   const invoke = async (name: string, args = ""): Promise<void> => {
     const command = mock.commands.get(name);
@@ -149,13 +59,14 @@ async function setup(config: Config = TEST_CONFIG) {
     await command.handler(args, context.ctx);
   };
 
-  const emit = async (eventName: string, eventData: unknown = {}): Promise<void> =>
-    mock.emit(eventName, context.ctx, eventData);
+  const emit = async (eventName: string, eventData: unknown = {}): Promise<void> => {
+    await mock.emit(eventName, eventData, context.ctx);
+  };
 
   return { ...mock, ...context, readToolStatus, invoke, emit };
 }
 
-function lastNotification(notifications: Notification[]): Notification {
+function lastNotification(notifications: MockNotification[]): MockNotification {
   const notification = notifications.at(-1);
   assert.ok(notification, "expected a UI notification");
   return notification;

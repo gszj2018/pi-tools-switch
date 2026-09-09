@@ -203,6 +203,11 @@ interface GatingDecision {
   reason?: string;
 }
 
+interface ActiveModeState {
+  name: string;
+  mode: GatingModeConfig;
+}
+
 /**
  * Decide whether a tool call is allowed under the active gating mode.
  * Check order: inactive -> exit_mode -> read-only -> allowTools -> write/edit
@@ -239,8 +244,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
   // fully overrides them.
   const exitTriggers = mergeGatingExitTriggers(getConfig().gatingExitTrigger);
 
-  let activeModeName: string | null = null;
-  let activeMode: GatingModeConfig | null = null;
+  let active: ActiveModeState | null = null;
   // Start unknown until session_start restores the active branch. null means
   // no gating mode; undefined means the persisted state could not be recognized.
   let lastReportedModeName: string | null | undefined = undefined;
@@ -249,11 +253,14 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
   // input) must not change the mode.
   let modeGuardActive = false;
 
+  const getModeName = () => active?.name ?? null;
+  const getMode = () => active?.mode ?? null;
+
   const readGatingStatus: GatingStatusReader = (toolName) =>
-    getGatingToolStatus(toolName, activeMode);
+    getGatingToolStatus(toolName, getMode());
 
   const refreshStatus = (ctx: ExtensionContext): void => {
-    ctx.ui.setStatus(MODE_STATUS_BAR_KEY, formatModeStatus(lastReportedModeName, activeModeName));
+    ctx.ui.setStatus(MODE_STATUS_BAR_KEY, formatModeStatus(lastReportedModeName, getModeName()));
   };
 
   const restoreReportedMode = (ctx: ExtensionContext): void => {
@@ -268,13 +275,11 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
   /** Apply a configured mode (or no mode), returning false for an unknown name. */
   const setMode = (name: string | null, ctx: ExtensionContext): boolean => {
     if (name === null) {
-      activeModeName = null;
-      activeMode = null;
+      active = null;
     } else {
       const mode = modes[name];
       if (!mode) return false;
-      activeModeName = name;
-      activeMode = mode;
+      active = { name, mode };
     }
     refreshStatus(ctx);
     return true;
@@ -291,7 +296,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
 
   /** Change modes from a user/runtime trigger and persist actual transitions. */
   const triggerMode = (name: string | null, ctx: ExtensionContext): boolean => {
-    if (name === activeModeName) return false;
+    if (name === getModeName()) return false;
     if (!setMode(name, ctx)) return false;
     appendModeTrigger(name, ctx);
     return true;
@@ -338,10 +343,10 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
         }),
       }),
       async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-        const modeName = activeModeName;
-        if (!modeName || !activeMode) {
+        if (!active) {
           throw new Error("exit_mode failed: no gating mode is currently active.");
         }
+        const modeName = getModeName();
         if (params.mode !== modeName) {
           throw new Error(
             `exit_mode failed: requested mode "${params.mode}" does not match the active mode "${modeName}".`,
@@ -438,12 +443,12 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
   });
 
   pi.on("tool_call", async (event, ctx) => {
-    if (!activeMode || !activeModeName) return;
+    if (!active) return;
     const decision = decideToolCall(
       event.toolName,
       event.input,
-      activeModeName,
-      activeMode,
+      getModeName(),
+      getMode(),
       ctx.cwd,
     );
     if (!decision.allowed) {
@@ -455,18 +460,18 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
     // Confirm the mode for this turn and raise the guard so input during the
     // run (e.g. steering) cannot change it.
     modeGuardActive = true;
-    if (!shouldInjectModeMessage(lastReportedModeName, activeModeName)) return;
+    const modeName = getModeName();
+    if (!shouldInjectModeMessage(lastReportedModeName, modeName)) return;
     // Record the mode for the next turn's comparison right away; settle only
     // drops the guard.
-    lastReportedModeName = activeModeName;
+    lastReportedModeName = modeName;
     refreshStatus(ctx);
     return {
       message: {
         customType: MODE_MESSAGE_CUSTOM_TYPE,
-        content: buildModeMessage(activeModeName, activeMode, ctx.cwd),
+        content: buildModeMessage(modeName, getMode(), ctx.cwd),
         display: true,
-        // activeModeName is always JSON-safe: string for a mode or null for no mode.
-        details: { modeName: activeModeName },
+        details: { modeName },
       },
     };
   });

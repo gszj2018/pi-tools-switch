@@ -20,18 +20,7 @@ const DEFAULT_PATH_RUNTIME: PathRuntime = {
 };
 
 /** The 8 built-in tools managed by this extension, in status display order. */
-export type BuiltinToolName =
-  | "read"
-  | "write"
-  | "edit"
-  | "bash"
-  | "powershell"
-  | "find"
-  | "grep"
-  | "ls";
-
-/** Built-in tool names in status display order. */
-export const BUILTIN_TOOL_NAMES: readonly BuiltinToolName[] = [
+export const BUILTIN_TOOL_NAMES = [
   "read",
   "write",
   "edit",
@@ -40,7 +29,9 @@ export const BUILTIN_TOOL_NAMES: readonly BuiltinToolName[] = [
   "find",
   "grep",
   "ls",
-];
+] as const;
+
+export type BuiltinToolName = (typeof BUILTIN_TOOL_NAMES)[number];
 
 /** Set form of BUILTIN_TOOL_NAMES for membership checks. */
 export const BUILTIN_TOOL_SET: ReadonlySet<string> = new Set(BUILTIN_TOOL_NAMES);

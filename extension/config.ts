@@ -159,15 +159,6 @@ function normalizeGatingMode(name: string, value: unknown, errors: string[]): Ga
   };
 }
 
-/**
- * Normalize gatingExitTrigger: absent or empty -> an empty list (merged with
- * the built-in exit triggers by tool-gating.ts). Invalid entries are reported
- * and dropped.
- */
-function normalizeExitTrigger(value: unknown, errors: string[]): string[] {
-  return normalizeTriggerList(value, errors, "gatingExitTrigger");
-}
-
 function normalizeGatingModes(value: unknown, errors: string[]): Record<string, GatingModeConfig> {
   if (value === undefined) return {};
   if (!isRecord(value)) {
@@ -198,7 +189,7 @@ export function normalizeConfig(data: unknown): ConfigLoadResult {
       presets: normalizePresets(data.presets, errors),
       subagentEnvVars: toStringArray(data.subagentEnvVars, errors, "subagentEnvVars"),
       gatingModes: normalizeGatingModes(data.gatingModes, errors),
-      gatingExitTrigger: normalizeExitTrigger(data.gatingExitTrigger, errors),
+      gatingExitTrigger: normalizeTriggerList(data.gatingExitTrigger, errors, "gatingExitTrigger"),
     }),
     errors,
   };

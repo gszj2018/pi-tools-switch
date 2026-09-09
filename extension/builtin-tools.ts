@@ -182,16 +182,18 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): ToolStatusR
   const presets = mergePresets(getConfig().presets);
   const readToolStatus: ToolStatusReader = () => getToolStatus(pi.getActiveTools(), pi.getAllTools());
 
-  const refreshStatus = (ctx: ExtensionContext): void => {
-    ctx.ui.setStatus(STATUS_BAR_KEY, computeStatusBar(pi.getActiveTools()));
+  const refreshStatus = (ctx: ExtensionContext): string => {
+    const status = computeStatusBar(pi.getActiveTools());
+    ctx.ui.setStatus(STATUS_BAR_KEY, status);
+    return status;
   };
 
-  const applyPresetByName = (name: string): { next: string[]; ok: boolean; error?: string } => {
+  /** Apply a preset by name; returns an error message on failure, null on success. */
+  const applyPresetByName = (name: string): string | null => {
     const tools = presets[name];
-    if (!tools) return { next: [], ok: false, error: `Unknown preset: ${name}` };
-    const next = applyPreset(pi.getActiveTools(), tools);
-    pi.setActiveTools(next);
-    return { next, ok: true };
+    if (!tools) return `Unknown preset: ${name}`;
+    pi.setActiveTools(applyPreset(pi.getActiveTools(), tools));
+    return null;
   };
 
   const registerToolToggleCommand = (enabled: boolean): void => {
@@ -222,11 +224,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): ToolStatusR
 
         const next = toggleBuiltinTools(pi.getActiveTools(), validation.tools, enabled);
         pi.setActiveTools(next);
-        refreshStatus(ctx);
-        ctx.ui.notify(
-          `${enabled ? "Enabled" : "Disabled"} ${tools.join(", ")}. Status: ${computeStatusBar(next)}`,
-          "info",
-        );
+        const status = refreshStatus(ctx);
+        ctx.ui.notify(`${enabled ? "Enabled" : "Disabled"} ${tools.join(", ")}. Status: ${status}`, "info");
       },
     });
   };
@@ -259,21 +258,28 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): ToolStatusR
         );
         return;
       }
-      const result = applyPresetByName(name);
-      if (!result.ok) {
-        ctx.ui.notify(result.error ?? "Unknown preset", "error");
+      const error = applyPresetByName(name);
+      if (error) {
+        ctx.ui.notify(error, "error");
         return;
       }
-      refreshStatus(ctx);
-      ctx.ui.notify(`Preset "${name}" applied. Status: ${computeStatusBar(result.next)}`, "info");
+      const status = refreshStatus(ctx);
+      ctx.ui.notify(`Preset "${name}" applied. Status: ${status}`, "info");
     },
   });
 
-  pi.on("session_start", async (_event, ctx) => refreshStatus(ctx));
-
-  pi.on("turn_start", async (_event, ctx) => refreshStatus(ctx));
-  pi.on("agent_settled", async (_event, ctx) => refreshStatus(ctx));
-  pi.on("input", async (_event, ctx) => refreshStatus(ctx));
+  pi.on("session_start", async (_event, ctx) => {
+    refreshStatus(ctx);
+  });
+  pi.on("turn_start", async (_event, ctx) => {
+    refreshStatus(ctx);
+  });
+  pi.on("agent_settled", async (_event, ctx) => {
+    refreshStatus(ctx);
+  });
+  pi.on("input", async (_event, ctx) => {
+    refreshStatus(ctx);
+  });
 
   return readToolStatus;
 }

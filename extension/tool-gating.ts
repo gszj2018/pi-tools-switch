@@ -125,6 +125,11 @@ export function formatModeStatus(
   return `[M: ${formatName(lastReported)} => ${formatName(active)}]`;
 }
 
+/** Deduplicated allowlist for messages: exit_mode, read-only tools, and mode allowTools. */
+function getAllowedTools(mode: GatingModeConfig): string[] {
+  return [...new Set([EXIT_MODE_TOOL_NAME, ...READ_ONLY_TOOLS, ...mode.allowTools])];
+}
+
 /** Blocked reason for write/edit when the target is outside allowWriteDir. */
 function buildWriteReason(modeName: string, mode: GatingModeConfig, cwd: string): string {
   let reason = `In ${modeName} mode, file modification is not allowed`;
@@ -140,7 +145,7 @@ function buildWriteReason(modeName: string, mode: GatingModeConfig, cwd: string)
  * allowTools, then notes that write/edit are conditionally allowed.
  */
 export function buildBlockReason(modeName: string, mode: GatingModeConfig): string {
-  const allowed = [...new Set([EXIT_MODE_TOOL_NAME, ...READ_ONLY_TOOLS, ...mode.allowTools])];
+  const allowed = getAllowedTools(mode);
   let reason = `In ${modeName} mode, this tool is not allowed. Allowed tools: ${allowed.join(", ")}`;
   reason +=
     mode.allowWriteDir.length > 0
@@ -161,7 +166,7 @@ export function buildModeMessage(
   if (!modeName || !mode) {
     return `You are not currently in any gating mode. You may call any available tool.`;
   }
-  const allowed = [...new Set([EXIT_MODE_TOOL_NAME, ...READ_ONLY_TOOLS, ...mode.allowTools])];
+  const allowed = getAllowedTools(mode);
   let text = `You are in ${modeName} mode. Allowed tools: ${allowed.join(", ")}`;
   if (mode.allowWriteDir.length > 0) {
     // Backticks render the path as an inline code span, which preserves the

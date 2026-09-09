@@ -312,10 +312,6 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
     }
   };
 
-  pi.registerEntryRenderer(MODE_TRIGGER_CUSTOM_TYPE, (entry, _options, theme) =>
-    new Text(theme.fg("muted", formatModeTriggerEntry(entry.data)), 0, 0),
-  );
-
   const ensureExitModeActive = (): void => {
     const activeTools = pi.getActiveTools();
     if (!activeTools.includes(EXIT_MODE_TOOL_NAME)) {
@@ -395,6 +391,10 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
   // Register one stable completion tool for every gating mode. Mode changes
   // update only module-local state and never alter the active tool schema.
   registerExitModeTool();
+
+  pi.registerEntryRenderer(MODE_TRIGGER_CUSTOM_TYPE, (entry, _options, theme) =>
+    new Text(theme.fg("muted", formatModeTriggerEntry(entry.data)), 0, 0),
+  );
 
   pi.on("session_start", async (_event, ctx) => {
     // Restore the report state before the active mode so a matching trigger

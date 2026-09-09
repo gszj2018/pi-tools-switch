@@ -31,6 +31,9 @@ const PARENT_DIR = path.resolve(PLANS_DIR, "..");
 const ABS_PLANS_DIR = resolveDir(".agents/plans", CWD);
 const BUILTIN_PLAN = BUILTIN_GATING_MODES["plan"];
 
+/** Build the ActiveModeState argument for decideToolCall from a mode name and config. */
+const stateFor = (name: string, mode: typeof BUILTIN_PLAN) => ({ name, mode });
+
 test("mergeGatingModes includes the built-in plan mode under the name 'plan'", () => {
   const merged = mergeGatingModes({});
   assert.deepEqual(merged["plan"], BUILTIN_PLAN);
@@ -104,7 +107,7 @@ test("matchAnyTrigger matches any non-empty trigger prefix", () => {
 
 test("decideToolCall allows everything when no mode is active", () => {
   for (const tool of ["bash", "powershell"]) {
-    const d = decideToolCall(tool, { command: "echo hi" }, null, null, CWD);
+    const d = decideToolCall(tool, { command: "echo hi" }, null, CWD);
     assert.deepEqual(d, { allowed: true }, `${tool} should be allowed without an active mode`);
   }
 });
@@ -113,8 +116,7 @@ test("decideToolCall allows exit_mode", () => {
   const d = decideToolCall(
     EXIT_MODE_TOOL_NAME,
     { mode: "plan", summary: "done" },
-    "plan",
-    BUILTIN_PLAN,
+    stateFor("plan", BUILTIN_PLAN),
     CWD,
   );
   assert.deepEqual(d, { allowed: true });
@@ -122,7 +124,7 @@ test("decideToolCall allows exit_mode", () => {
 
 test("decideToolCall allows read-only tools", () => {
   for (const tool of ["read", "find", "grep", "ls"]) {
-    const d = decideToolCall(tool, {}, "plan", BUILTIN_PLAN, CWD);
+    const d = decideToolCall(tool, {}, stateFor("plan", BUILTIN_PLAN), CWD);
     assert.equal(d.allowed, true, `${tool} should be allowed`);
   }
 });
@@ -130,7 +132,7 @@ test("decideToolCall allows read-only tools", () => {
 test("decideToolCall allows allowTools entries", () => {
   for (const tool of ["bash", "powershell"]) {
     const mode = { ...BUILTIN_PLAN, allowTools: [tool] };
-    const d = decideToolCall(tool, { command: "echo hi" }, "plan", mode, CWD);
+    const d = decideToolCall(tool, { command: "echo hi" }, stateFor("plan", mode), CWD);
     assert.deepEqual(d, { allowed: true }, `${tool} should be allowed by allowTools`);
   }
 });
@@ -138,7 +140,7 @@ test("decideToolCall allows allowTools entries", () => {
 test("decideToolCall allows write/edit strictly inside allowWriteDir", () => {
   for (const tool of ["write", "edit"]) {
     for (const targetPath of [PLAN_FILE, NESTED_PLAN_FILE]) {
-      const d = decideToolCall(tool, { path: targetPath }, "plan", BUILTIN_PLAN, CWD);
+      const d = decideToolCall(tool, { path: targetPath }, stateFor("plan", BUILTIN_PLAN), CWD);
       assert.equal(d.allowed, true, `${tool} path ${targetPath} inside allowWriteDir should be allowed`);
     }
   }
@@ -153,7 +155,7 @@ test("decideToolCall blocks unsupported tool paths", () => {
   ];
   for (const tool of ["write", "edit"]) {
     for (const path of paths) {
-      const decision = decideToolCall(tool, { path }, "plan", BUILTIN_PLAN, CWD);
+      const decision = decideToolCall(tool, { path }, stateFor("plan", BUILTIN_PLAN), CWD);
       assert.equal(decision.allowed, false, `${tool}: ${path}`);
       assert.match(decision.reason ?? "", /is not supported in current mode/);
     }
@@ -162,21 +164,20 @@ test("decideToolCall blocks unsupported tool paths", () => {
 
 test("decideToolCall blocks write/edit paths equal to allowWriteDir", () => {
   for (const tool of ["write", "edit"]) {
-    const d = decideToolCall(tool, { path: PLANS_DIR }, "plan", BUILTIN_PLAN, CWD);
+    const d = decideToolCall(tool, { path: PLANS_DIR }, stateFor("plan", BUILTIN_PLAN), CWD);
     assert.equal(d.allowed, false, `${tool} path equal to allowWriteDir should be blocked`);
   }
 });
 
 test("decideToolCall preserves literal @ in allowWriteDir configuration", () => {
   const mode = { trigger: ["X:"], allowTools: [], allowWriteDir: ["@.agents/plans"] };
-  const ordinaryPath = decideToolCall("write", { path: ".agents/plans/plan.md" }, "x", mode, CWD);
+  const ordinaryPath = decideToolCall("write", { path: ".agents/plans/plan.md" }, stateFor("x", mode), CWD);
   assert.equal(ordinaryPath.allowed, false);
 
   const literalAtPath = decideToolCall(
     "write",
     { path: path.join(CWD, "@.agents", "plans", "plan.md") },
-    "x",
-    mode,
+    stateFor("x", mode),
     CWD,
   );
   assert.equal(literalAtPath.allowed, true);
@@ -189,7 +190,7 @@ test("decideToolCall blocks write/edit outside allowWriteDir with reason", () =>
       // This is the immediate parent of allowWriteDir, so relative(plans, path) is exactly "..".
       PARENT_DIR,
     ]) {
-      const d = decideToolCall(tool, { path: targetPath }, "plan", BUILTIN_PLAN, CWD);
+      const d = decideToolCall(tool, { path: targetPath }, stateFor("plan", BUILTIN_PLAN), CWD);
       assert.equal(d.allowed, false, `${tool} outside path ${targetPath} should be blocked`);
       assert.ok(
         d.reason?.includes("In plan mode, file modification is not allowed"),
@@ -203,20 +204,20 @@ test("decideToolCall blocks write/edit outside allowWriteDir with reason", () =>
 
 test("decideToolCall blocks write/edit when allowWriteDir is empty (no dir suffix)", () => {
   const mode = { trigger: ["X:"], allowTools: [], allowWriteDir: [] };
-  const d = decideToolCall("write", { path: path.resolve(CWD, "anything.md") }, "x", mode, CWD);
+  const d = decideToolCall("write", { path: path.resolve(CWD, "anything.md") }, stateFor("x", mode), CWD);
   assert.equal(d.allowed, false);
   assert.equal(d.reason, "In x mode, file modification is not allowed");
 });
 
 test("decideToolCall allows write when allowTools includes it (bypasses dir check)", () => {
   const mode = { ...BUILTIN_PLAN, allowTools: ["write"] };
-  const d = decideToolCall("write", { path: path.resolve(CWD, "anywhere.md") }, "plan", mode, CWD);
+  const d = decideToolCall("write", { path: path.resolve(CWD, "anywhere.md") }, stateFor("plan", mode), CWD);
   assert.deepEqual(d, { allowed: true });
 });
 
 test("decideToolCall blocks other tools (bash, powershell, external) with reason", () => {
   for (const tool of ["bash", "powershell", "my_custom_tool"]) {
-    const d = decideToolCall(tool, {}, "plan", BUILTIN_PLAN, CWD);
+    const d = decideToolCall(tool, {}, stateFor("plan", BUILTIN_PLAN), CWD);
     assert.equal(d.allowed, false, `${tool} should be blocked`);
     assert.ok(
       d.reason?.includes("In plan mode, this tool is not allowed"),
@@ -235,7 +236,7 @@ test("decideToolCall blocks other tools (bash, powershell, external) with reason
 
 test("decideToolCall appends allowTools to the allowed-tools list", () => {
   const mode = { ...BUILTIN_PLAN, allowTools: ["bash", "my_tool"] };
-  const d = decideToolCall("python", {}, "plan", mode, CWD);
+  const d = decideToolCall("python", {}, stateFor("plan", mode), CWD);
   assert.equal(d.allowed, false);
   assert.ok(
     d.reason?.includes("Allowed tools: exit_mode, read, find, grep, ls, bash, my_tool"),
@@ -253,9 +254,9 @@ test("buildBlockReason notes write/edit as not allowed when allowWriteDir is emp
 });
 
 test("decideToolCall blocks write with missing or non-string path", () => {
-  const d1 = decideToolCall("write", {}, "plan", BUILTIN_PLAN, CWD);
+  const d1 = decideToolCall("write", {}, stateFor("plan", BUILTIN_PLAN), CWD);
   assert.equal(d1.allowed, false);
-  const d2 = decideToolCall("write", { path: 42 }, "plan", BUILTIN_PLAN, CWD);
+  const d2 = decideToolCall("write", { path: 42 }, stateFor("plan", BUILTIN_PLAN), CWD);
   assert.equal(d2.allowed, false);
 });
 

@@ -216,11 +216,11 @@ interface ActiveModeState {
 export function decideToolCall(
   toolName: string,
   input: unknown,
-  modeName: string | null,
-  mode: GatingModeConfig | null,
+  state: ActiveModeState | null,
   cwd: string,
 ): GatingDecision {
-  if (!mode || !modeName) return { allowed: true };
+  if (!state) return { allowed: true };
+  const { name, mode } = state;
   if (isToolUnrestricted(toolName, mode)) return { allowed: true };
   if (toolName === "write" || toolName === "edit") {
     const path = (input as { path?: unknown } | undefined)?.path;
@@ -231,9 +231,9 @@ export function decideToolCall(
     } catch (error) {
       return { allowed: false, reason: error instanceof Error ? error.message : String(error) };
     }
-    return { allowed: false, reason: buildWriteReason(modeName, mode, cwd) };
+    return { allowed: false, reason: buildWriteReason(name, mode, cwd) };
   }
-  return { allowed: false, reason: buildBlockReason(modeName, mode) };
+  return { allowed: false, reason: buildBlockReason(name, mode) };
 }
 
 export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatusReader {
@@ -443,14 +443,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
   });
 
   pi.on("tool_call", async (event, ctx) => {
-    if (!active) return;
-    const decision = decideToolCall(
-      event.toolName,
-      event.input,
-      getModeName(),
-      getMode(),
-      ctx.cwd,
-    );
+    const decision = decideToolCall(event.toolName, event.input, active, ctx.cwd);
     if (!decision.allowed) {
       return { block: true, reason: decision.reason };
     }

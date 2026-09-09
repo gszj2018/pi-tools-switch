@@ -16,7 +16,7 @@ import {
 } from "./utils.ts";
 import type { Config } from "./config.ts";
 import type { ToolStatusReader, ToolStatusSnapshot } from "./utils-status.ts";
-import { rejectUnexpectedArgs } from "./utils-pi.ts";
+import { filterCompletions, rejectUnexpectedArgs } from "./utils-pi.ts";
 
 const STATUS_BAR_KEY = "pi-tools-switch-status";
 
@@ -151,8 +151,7 @@ export function builtinToolCompletions(prefix: string): AutocompleteItem[] | nul
       value: [...completeTokens, tool].join(" "),
       label: tool,
     }));
-    const filtered = items.filter((item) => item.value.startsWith(prefix));
-    return filtered.length > 0 ? filtered : null;
+    return filterCompletions(items, prefix);
   }
 
   const selected = isBuiltinToolName(last) ? [...completeTokens, last] : completeTokens;
@@ -164,17 +163,14 @@ export function builtinToolCompletions(prefix: string): AutocompleteItem[] | nul
     value: [...selected, tool].join(" "),
     label: tool,
   }));
-  const filtered = items.filter((item) => item.value.startsWith(prefix));
-  return filtered.length > 0 ? filtered : null;
+  return filterCompletions(items, prefix);
 }
 
 function presetNameCompletions(
   prefix: string,
   presets: Record<string, readonly string[]>,
 ): AutocompleteItem[] | null {
-  const items = Object.keys(presets).map((name) => ({ value: name, label: name }));
-  const filtered = items.filter((item) => item.value.startsWith(prefix));
-  return filtered.length > 0 ? filtered : null;
+  return filterCompletions(Object.keys(presets).map((name) => ({ value: name, label: name })), prefix);
 }
 
 export function register(pi: ExtensionAPI, getConfig: () => Config): ToolStatusReader {

@@ -11,7 +11,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 import { Text } from "@earendil-works/pi-tui";
 import { READ_ONLY_TOOLS, isPathInDirs, resolveDir } from "./utils.ts";
-import { rejectUnexpectedArgs } from "./utils-pi.ts";
+import { filterCompletions, rejectUnexpectedArgs } from "./utils-pi.ts";
 import {
   MODE_MESSAGE_CUSTOM_TYPE,
   MODE_TRIGGER_CUSTOM_TYPE,
@@ -496,11 +496,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
 
   pi.registerCommand("ptsw-mode-show", {
     description: "Show gating mode details: /ptsw-mode-show <name>",
-    getArgumentCompletions: (prefix) => {
-      const items = Object.keys(modes).map((name) => ({ value: name, label: name }));
-      const filtered = items.filter((item) => item.value.startsWith(prefix));
-      return filtered.length > 0 ? filtered : null;
-    },
+    getArgumentCompletions: (prefix) =>
+      filterCompletions(Object.keys(modes).map((name) => ({ value: name, label: name })), prefix),
     handler: async (args, ctx) => {
       const name = args.trim();
       if (name === "") {

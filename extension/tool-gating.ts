@@ -413,12 +413,13 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
   pi.on("input", async (event, ctx) => {
     const modeMatch = matchTrigger(event.text, modes);
     const exitMatch = matchAnyTrigger(event.text, exitTriggers);
+    const anyTriggerMatch = modeMatch || exitMatch;
     // While the guard is raised (an agent run is in progress), input that
     // attempts a switch (a mode trigger or the exit trigger) is consumed so it
     // never reaches the agent, with an error notice. Ordinary input (normal
     // steering/follow-up) passes through untouched.
     if (modeGuardActive) {
-      if (modeMatch || exitMatch) {
+      if (anyTriggerMatch) {
         ctx.ui.notify(
           "Cannot switch the gating mode while the agent is running. Wait for the current turn to finish.",
           "error",
@@ -429,12 +430,8 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
     }
     // A mode trigger activates/switches the mode; otherwise any exit-trigger
     // match exits the active mode (harmless when none is active).
-    if (modeMatch) {
-      triggerMode(modeMatch, ctx);
-      return;
-    }
-    if (exitMatch) {
-      triggerMode(null, ctx);
+    if (anyTriggerMatch) {
+      triggerMode(modeMatch || null, ctx);
       return;
     }
     refreshStatus(ctx);

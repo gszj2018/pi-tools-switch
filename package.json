@@ -11,6 +11,14 @@
   "license": "MIT",
   "author": "gszj2018",
   "type": "module",
+  "files": [
+    "extension",
+    "prompts",
+    "schemas",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node --import tsx --test",
     "typecheck": "tsc --noEmit"

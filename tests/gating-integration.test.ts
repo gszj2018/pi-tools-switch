@@ -301,11 +301,12 @@ test("the exit trigger exits the mode, keeps exit_mode active, and ungates tools
 });
 
 test("the exit trigger with no active mode is harmless", async () => {
-  const { emit, activeTools } = setup();
+  const { emit, activeTools, appendedEntries } = setup();
   await emit("session_start");
   await emit("input", { text: "/normal-mode" });
   assert.deepEqual(activeTools(), [EXIT_MODE_TOOL_NAME]);
   assert.equal(await emit("before_agent_start"), undefined);
+  assert.deepEqual(appendedEntries, []);
 });
 
 test("a non-empty configured exit trigger fully overrides the built-in prefix", async () => {

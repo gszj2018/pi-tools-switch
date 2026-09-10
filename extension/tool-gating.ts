@@ -297,11 +297,10 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
   };
 
   /** Change modes from a user/runtime trigger and persist actual transitions. */
-  const triggerMode = (name: string | null, ctx: ExtensionContext): boolean => {
-    if (name === getModeName()) return false;
-    if (!setMode(name, ctx)) return false;
+  const triggerMode = (name: string | null, ctx: ExtensionContext): void => {
+    if (name === getModeName()) return;
+    if (!setMode(name, ctx)) return;
     appendModeTrigger(name, ctx);
-    return true;
   };
 
   const restoreTriggeredMode = (ctx: ExtensionContext): void => {

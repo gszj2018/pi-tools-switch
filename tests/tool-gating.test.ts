@@ -31,7 +31,7 @@ const PARENT_DIR = path.resolve(PLANS_DIR, "..");
 const ABS_PLANS_DIR = resolveDir(".agents/plans", CWD);
 const BUILTIN_PLAN = BUILTIN_GATING_MODES["plan"];
 
-/** Build the ActiveModeState argument for decideToolCall from a mode name and config. */
+/** Build an ActiveModeState argument from a mode name and config. */
 const stateFor = (name: string, mode: typeof BUILTIN_PLAN) => ({ name, mode });
 
 test("mergeGatingModes includes the built-in plan mode under the name 'plan'", () => {
@@ -246,7 +246,7 @@ test("decideToolCall appends allowTools to the allowed-tools list", () => {
 
 test("buildBlockReason notes write/edit as not allowed when allowWriteDir is empty", () => {
   const mode = { trigger: ["X:"], allowTools: [], allowWriteDir: [] };
-  const reason = buildBlockReason("x", mode);
+  const reason = buildBlockReason(stateFor("x", mode));
   assert.equal(
     reason,
     "In x mode, this tool is not allowed. Allowed tools: exit_mode, read, find, grep, ls. write/edit are not allowed",
@@ -326,13 +326,13 @@ test("shouldInjectModeMessage injects when the mode changed vs the previously re
 
 test("buildModeMessage reports no active mode and free tool use", () => {
   assert.equal(
-    buildModeMessage(null, null, CWD),
+    buildModeMessage(null, CWD),
     "You are not currently in any gating mode. You may call any available tool.",
   );
 });
 
 test("buildModeMessage states the active mode, allowed tools, and write dirs", () => {
-  const msg = buildModeMessage("plan", BUILTIN_PLAN, CWD);
+  const msg = buildModeMessage(stateFor("plan", BUILTIN_PLAN), CWD);
   assert.ok(msg.includes("You are in plan mode"), `states mode: ${msg}`);
   assert.ok(
     msg.includes("Allowed tools: exit_mode, read, find, grep, ls"),
@@ -351,7 +351,7 @@ test("buildModeMessage states the active mode, allowed tools, and write dirs", (
 
 test("buildModeMessage appends allowTools and notes write/edit not allowed when empty", () => {
   const mode = { trigger: ["X:"], allowTools: ["bash"], allowWriteDir: [] };
-  const msg = buildModeMessage("x", mode, CWD);
+  const msg = buildModeMessage(stateFor("x", mode), CWD);
   assert.ok(
     msg.includes("Allowed tools: exit_mode, read, find, grep, ls, bash"),
     `lists allowTools: ${msg}`,

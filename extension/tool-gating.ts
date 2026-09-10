@@ -126,14 +126,20 @@ export function formatModeStatus(
   return `[M: ${formatName(lastReported)} => ${formatName(active)}]`;
 }
 
+interface ActiveModeState {
+  name: string;
+  mode: GatingModeConfig;
+}
+
 /** Deduplicated allowlist for messages: exit_mode, read-only tools, and mode allowTools. */
 function getAllowedTools(mode: GatingModeConfig): string[] {
   return [...new Set([EXIT_MODE_TOOL_NAME, ...READ_ONLY_TOOLS, ...mode.allowTools])];
 }
 
 /** Blocked reason for write/edit when the target is outside allowWriteDir. */
-function buildWriteReason(modeName: string, mode: GatingModeConfig, cwd: string): string {
-  let reason = `In ${modeName} mode, file modification is not allowed`;
+function buildWriteReason(state: ActiveModeState, cwd: string): string {
+  const { name, mode } = state;
+  let reason = `In ${name} mode, file modification is not allowed`;
   if (mode.allowWriteDir.length > 0) {
     const dirs = mode.allowWriteDir.map((dir) => resolveDir(dir, cwd)).join(", ");
     reason += `\nExcept in the following directories: ${dirs}`;
@@ -145,9 +151,10 @@ function buildWriteReason(modeName: string, mode: GatingModeConfig, cwd: string)
  * Blocked reason for other tools: lists exit_mode, read-only tools, and mode
  * allowTools, then notes that write/edit are conditionally allowed.
  */
-export function buildBlockReason(modeName: string, mode: GatingModeConfig): string {
+export function buildBlockReason(state: ActiveModeState): string {
+  const { name, mode } = state;
   const allowed = getAllowedTools(mode);
-  let reason = `In ${modeName} mode, this tool is not allowed. Allowed tools: ${allowed.join(", ")}`;
+  let reason = `In ${name} mode, this tool is not allowed. Allowed tools: ${allowed.join(", ")}`;
   reason +=
     mode.allowWriteDir.length > 0
       ? ". write/edit are conditionally allowed"
@@ -159,16 +166,13 @@ export function buildBlockReason(modeName: string, mode: GatingModeConfig): stri
  * Mode-state message text injected before an agent turn: states the active
  * mode and its restrictions, or that no gating mode is active.
  */
-export function buildModeMessage(
-  modeName: string | null,
-  mode: GatingModeConfig | null,
-  cwd: string,
-): string {
-  if (!modeName || !mode) {
+export function buildModeMessage(state: ActiveModeState | null, cwd: string): string {
+  if (!state) {
     return `You are not currently in any gating mode. You may call any available tool.`;
   }
+  const { name, mode } = state;
   const allowed = getAllowedTools(mode);
-  let text = `You are in ${modeName} mode. Allowed tools: ${allowed.join(", ")}`;
+  let text = `You are in ${name} mode. Allowed tools: ${allowed.join(", ")}`;
   if (mode.allowWriteDir.length > 0) {
     // Backticks render the path as an inline code span, which preserves the
     // backslashes (plain text would treat `\.` as a CommonMark escape).
@@ -206,11 +210,6 @@ interface GatingDecision {
   reason?: string;
 }
 
-interface ActiveModeState {
-  name: string;
-  mode: GatingModeConfig;
-}
-
 /**
  * Decide whether a tool call is allowed under the active gating mode.
  * Check order: inactive -> exit_mode -> read-only -> allowTools -> write/edit
@@ -223,7 +222,7 @@ export function decideToolCall(
   cwd: string,
 ): GatingDecision {
   if (!state) return { allowed: true };
-  const { name, mode } = state;
+  const { mode } = state;
   if (isToolUnrestricted(toolName, mode)) return { allowed: true };
   if (toolName === "write" || toolName === "edit") {
     const path = (input as { path?: unknown } | undefined)?.path;
@@ -234,9 +233,9 @@ export function decideToolCall(
     } catch (error) {
       return { allowed: false, reason: error instanceof Error ? error.message : String(error) };
     }
-    return { allowed: false, reason: buildWriteReason(name, mode, cwd) };
+    return { allowed: false, reason: buildWriteReason(state, cwd) };
   }
-  return { allowed: false, reason: buildBlockReason(name, mode) };
+  return { allowed: false, reason: buildBlockReason(state) };
 }
 
 export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatusReader {
@@ -465,7 +464,7 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): GatingStatu
     return {
       message: {
         customType: MODE_MESSAGE_CUSTOM_TYPE,
-        content: buildModeMessage(modeName, getMode(), ctx.cwd),
+        content: buildModeMessage(active, ctx.cwd),
         display: true,
         details: { modeName },
       },

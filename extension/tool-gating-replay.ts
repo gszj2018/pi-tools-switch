@@ -60,7 +60,8 @@ export function replayLastTriggeredModeName(ctx: ExtensionContext): ReplayResult
   return replayLastModeName(ctx, "custom", MODE_TRIGGER_CUSTOM_TYPE);
 }
 
-function replayModeName(data: unknown): ReplayResult {
+/** Parse a persisted mode payload without validating configured mode names. */
+export function replayModeName(data: unknown): ReplayResult {
   if (data === null || typeof data !== "object" || !("modeName" in data)) {
     return replayInvalidModeName();
   }

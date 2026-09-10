@@ -764,7 +764,28 @@ test("a removed persisted mode only notifies and does not switch modes", async (
 test("registers and formats the persisted trigger-entry renderer", () => {
   const { entryRenderers } = setup();
   assert.ok(entryRenderers[MODE_TRIGGER_CUSTOM_TYPE]);
-  assert.equal(formatModeTriggerEntry({ modeName: "plan" }), "Triggered: tool gating enabled. (mode: plan)");
-  assert.equal(formatModeTriggerEntry({ modeName: null }), "Triggered: tool gating disabled.");
-  assert.equal(formatModeTriggerEntry({}), "Triggered: tool gating record is invalid.");
+  for (const [modeName, expected] of [
+    ["plan", "Triggered: tool gating enabled. (mode: plan)"],
+    ["removed", "Triggered: tool gating enabled. (mode: removed)"],
+    ["", "Triggered: tool gating enabled. (mode: )"],
+    [null, "Triggered: tool gating disabled."],
+  ] as const) {
+    assert.equal(formatModeTriggerEntry(Object.freeze({ modeName })), expected);
+  }
+  for (const data of [
+    undefined,
+    null,
+    "modeName",
+    42,
+    false,
+    [],
+    {},
+    { modeName: undefined },
+    { modeName: 42 },
+    { modeName: false },
+    { modeName: [] },
+    { modeName: {} },
+  ]) {
+    assert.equal(formatModeTriggerEntry(data), "Triggered: tool gating record is invalid.");
+  }
 });

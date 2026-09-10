@@ -17,6 +17,7 @@ import {
   MODE_TRIGGER_CUSTOM_TYPE,
   replayLastReportedModeName,
   replayLastTriggeredModeName,
+  replayModeName,
 } from "./tool-gating-replay.ts";
 import type { Config, GatingModeConfig } from "./config.ts";
 import type { GatingStatusReader, GatingToolStatus } from "./utils-status.ts";
@@ -194,13 +195,10 @@ export function shouldInjectModeMessage(
 
 /** Format a persisted trigger entry as a compact TUI history line. */
 export function formatModeTriggerEntry(data: unknown): string {
-  if (data !== null && typeof data === "object" && "modeName" in data) {
-    if (typeof data.modeName === "string") {
-      return `Triggered: tool gating enabled. (mode: ${data.modeName})`;
-    }
-    if (data.modeName === null) return "Triggered: tool gating disabled.";
-  }
-  return "Triggered: tool gating record is invalid.";
+  const { modeName } = replayModeName(data);
+  if (modeName === undefined) return "Triggered: tool gating record is invalid.";
+  if (modeName === null) return "Triggered: tool gating disabled.";
+  return `Triggered: tool gating enabled. (mode: ${modeName})`;
 }
 
 interface GatingDecision {

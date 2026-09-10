@@ -9,6 +9,7 @@ import {
   MODE_TRIGGER_CUSTOM_TYPE,
   replayLastReportedModeName,
   replayLastTriggeredModeName,
+  replayModeName,
 } from "../extension/tool-gating-replay.ts";
 
 function createContext(getBranch: () => unknown[]): ExtensionContext {
@@ -34,6 +35,32 @@ function triggerEntry(data?: unknown): unknown {
     data,
   };
 }
+
+test("replayModeName preserves strings and null without validating configured names", () => {
+  for (const modeName of ["plan", "removed", "", null]) {
+    const data = Object.freeze({ modeName });
+    assert.deepEqual(replayModeName(data), { modeName });
+  }
+});
+
+test("replayModeName returns unknown for missing or malformed payloads", () => {
+  for (const data of [
+    undefined,
+    null,
+    "modeName",
+    42,
+    false,
+    [],
+    {},
+    { modeName: undefined },
+    { modeName: 42 },
+    { modeName: false },
+    { modeName: [] },
+    { modeName: {} },
+  ]) {
+    assert.deepEqual(replayModeName(data), { modeName: undefined });
+  }
+});
 
 test("replayLastReportedModeName returns null when the active branch has no mode message", () => {
   const ctx = createContext(() => []);

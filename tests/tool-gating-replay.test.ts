@@ -1,5 +1,5 @@
 /**
- * Unit tests for replaying the last injected tool-gating mode message.
+ * Unit tests for persisted mode payload parsing and active-branch replay.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -10,6 +10,7 @@ import {
   replayLastReportedModeName,
   replayLastTriggeredModeName,
   replayModeName,
+  type ReplayResult,
 } from "../extension/tool-gating-replay.ts";
 
 function createContext(getBranch: () => unknown[]): ExtensionContext {
@@ -20,7 +21,7 @@ function createContext(getBranch: () => unknown[]): ExtensionContext {
   } as unknown as ExtensionContext;
 }
 
-function modeMessage(details?: unknown): unknown {
+function modeMessage(details?: unknown) {
   return {
     type: "custom_message",
     customType: MODE_MESSAGE_CUSTOM_TYPE,
@@ -28,12 +29,61 @@ function modeMessage(details?: unknown): unknown {
   };
 }
 
-function triggerEntry(data?: unknown): unknown {
+function triggerEntry(data?: unknown) {
   return {
     type: "custom",
     customType: MODE_TRIGGER_CUSTOM_TYPE,
     data,
   };
+}
+
+type Replay = typeof replayLastReportedModeName;
+type EntryFactory = typeof modeMessage | typeof triggerEntry;
+
+function assertReplay(replay: Replay, branch: unknown[], expected: ReplayResult): void {
+  assert.deepEqual(replay(createContext(() => branch)), expected);
+}
+
+function assertSerializedNoMode(replay: Replay, entry: EntryFactory): void {
+  const persisted = JSON.parse(JSON.stringify(entry({ modeName: null })));
+  assertReplay(replay, [persisted], { modeName: null });
+}
+
+function assertLatestMode(replay: Replay, entry: EntryFactory): void {
+  assertReplay(replay, [
+    entry({ modeName: "plan" }),
+    entry({ modeName: "review" }),
+    { ...entry({ modeName: "ignored" }), customType: "another-extension" },
+  ], { modeName: "review" });
+}
+
+function assertIgnoredEntryTypes(replay: Replay, entry: EntryFactory, otherEntryType: string): void {
+  assertReplay(replay, [
+    entry({ modeName: "plan" }),
+    { ...entry({ modeName: "ignored" }), type: otherEntryType },
+    { type: "message", message: { role: "custom", customType: entry().customType } },
+    { type: "compaction", details: { modeName: "ignored" } },
+  ], { modeName: "plan" });
+}
+
+function assertMalformedPayloads(replay: Replay, entry: EntryFactory): void {
+  for (const payload of [
+    undefined,
+    "modeName",
+    {},
+    { modeName: undefined },
+    { modeName: 42 },
+    { modeName: false },
+  ]) {
+    assertReplay(replay, [entry(payload)], { modeName: undefined });
+  }
+}
+
+function assertReadFailure(replay: Replay): void {
+  const ctx = createContext(() => {
+    throw new Error("session unavailable");
+  });
+  assert.deepEqual(replay(ctx), { modeName: undefined, error: "session unavailable" });
 }
 
 test("replayModeName preserves strings and null without validating configured names", () => {
@@ -63,149 +113,72 @@ test("replayModeName returns unknown for missing or malformed payloads", () => {
 });
 
 test("replayLastReportedModeName returns null when the active branch has no mode message", () => {
-  const ctx = createContext(() => []);
-
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: null });
+  assertReplay(replayLastReportedModeName, [], { modeName: null });
 });
 
 test("replayLastReportedModeName restores an explicit persisted no-mode state", () => {
-  const ctx = createContext(() => [modeMessage({ modeName: null })]);
-
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: null });
+  assertReplay(replayLastReportedModeName, [modeMessage({ modeName: null })], { modeName: null });
 });
 
 test("replayLastReportedModeName preserves the no-mode marker through JSON serialization", () => {
-  const persistedMessage = JSON.parse(JSON.stringify(modeMessage({ modeName: null })));
-  const ctx = createContext(() => [persistedMessage]);
-
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: null });
+  assertSerializedNoMode(replayLastReportedModeName, modeMessage);
 });
 
 test("replayLastReportedModeName restores a known mode name", () => {
-  const ctx = createContext(() => [modeMessage({ modeName: "plan" })]);
-
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: "plan" });
+  assertReplay(replayLastReportedModeName, [modeMessage({ modeName: "plan" })], { modeName: "plan" });
 });
 
 test("replayLastReportedModeName uses the latest matching mode message", () => {
-  const ctx = createContext(() => [
-    modeMessage({ modeName: "plan" }),
-    { type: "custom_message", customType: "another-extension", details: { modeName: "ignored" } },
-    modeMessage({ modeName: "review" }),
-  ]);
-
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: "review" });
+  assertLatestMode(replayLastReportedModeName, modeMessage);
 });
 
 test("replayLastReportedModeName skips non-custom-message entries", () => {
-  const ctx = createContext(() => [
-    { type: "message", message: { role: "custom", customType: "pi-tools-switch-mode" } },
-    { type: "compaction", details: { modeName: "plan" } },
-    modeMessage({ modeName: "plan" }),
-  ]);
-
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: "plan" });
+  assertIgnoredEntryTypes(replayLastReportedModeName, modeMessage, "custom");
 });
 
 test("replayLastReportedModeName treats missing or malformed details as unknown", () => {
-  for (const details of [
-    undefined,
-    "modeName",
-    {},
-    { modeName: undefined },
-    { modeName: 42 },
-    { modeName: false },
-  ]) {
-    const ctx = createContext(() => [modeMessage(details)]);
-    assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
-  }
+  assertMalformedPayloads(replayLastReportedModeName, modeMessage);
 });
 
 test("replayLastReportedModeName treats legacy mode messages without details as unknown", () => {
-  const ctx = createContext(() => [modeMessage()]);
-
-  assert.deepEqual(replayLastReportedModeName(ctx), { modeName: undefined });
+  const entry = { type: "custom_message", customType: MODE_MESSAGE_CUSTOM_TYPE };
+  assertReplay(replayLastReportedModeName, [entry], { modeName: undefined });
 });
 
 test("replayLastReportedModeName returns an error when reading the active branch fails", () => {
-  const ctx = createContext(() => {
-    throw new Error("session unavailable");
-  });
-
-  assert.deepEqual(replayLastReportedModeName(ctx), {
-    modeName: undefined,
-    error: "session unavailable",
-  });
+  assertReadFailure(replayLastReportedModeName);
 });
 
 // --- Persisted trigger-entry replay ----------------------------------------
 
 test("replayLastTriggeredModeName returns null without a trigger entry", () => {
-  const ctx = createContext(() => []);
-
-  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: null });
+  assertReplay(replayLastTriggeredModeName, [], { modeName: null });
 });
 
 test("replayLastTriggeredModeName restores an enabled mode name", () => {
-  const ctx = createContext(() => [triggerEntry({ modeName: "plan" })]);
-
-  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: "plan" });
+  assertReplay(replayLastTriggeredModeName, [triggerEntry({ modeName: "plan" })], { modeName: "plan" });
 });
 
 test("replayLastTriggeredModeName restores an explicit persisted disabled state", () => {
-  const persistedEntry = JSON.parse(JSON.stringify(triggerEntry({ modeName: null })));
-  const ctx = createContext(() => [persistedEntry]);
-
-  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: null });
+  assertSerializedNoMode(replayLastTriggeredModeName, triggerEntry);
 });
 
 test("replayLastTriggeredModeName uses the latest matching trigger entry", () => {
-  const ctx = createContext(() => [
-    triggerEntry({ modeName: "plan" }),
-    { type: "custom", customType: "another-extension", data: { modeName: "ignored" } },
-    triggerEntry({ modeName: "review" }),
-  ]);
-
-  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: "review" });
+  assertLatestMode(replayLastTriggeredModeName, triggerEntry);
 });
 
 test("replayLastTriggeredModeName ignores non-custom entries", () => {
-  const ctx = createContext(() => [
-    modeMessage({ modeName: "plan" }),
-    { type: "message", message: { role: "custom", customType: MODE_TRIGGER_CUSTOM_TYPE } },
-    triggerEntry({ modeName: "plan" }),
-  ]);
-
-  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: "plan" });
+  assertIgnoredEntryTypes(replayLastTriggeredModeName, triggerEntry, "custom_message");
 });
 
 test("replayLastTriggeredModeName treats malformed trigger data as unknown", () => {
-  for (const data of [
-    undefined,
-    "modeName",
-    {},
-    { modeName: undefined },
-    { modeName: 42 },
-    { modeName: false },
-  ]) {
-    const ctx = createContext(() => [triggerEntry(data)]);
-    assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: undefined });
-  }
+  assertMalformedPayloads(replayLastTriggeredModeName, triggerEntry);
 });
 
 test("replayLastTriggeredModeName leaves configured-mode validation to its caller", () => {
-  const ctx = createContext(() => [triggerEntry({ modeName: "removed" })]);
-
-  assert.deepEqual(replayLastTriggeredModeName(ctx), { modeName: "removed" });
+  assertReplay(replayLastTriggeredModeName, [triggerEntry({ modeName: "removed" })], { modeName: "removed" });
 });
 
 test("replayLastTriggeredModeName returns an error when reading the active branch fails", () => {
-  const ctx = createContext(() => {
-    throw new Error("session unavailable");
-  });
-
-  assert.deepEqual(replayLastTriggeredModeName(ctx), {
-    modeName: undefined,
-    error: "session unavailable",
-  });
+  assertReadFailure(replayLastTriggeredModeName);
 });

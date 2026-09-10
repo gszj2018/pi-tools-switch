@@ -412,59 +412,28 @@ test("tools explicitly included in allowTools are allowed", async () => {
   }
 });
 
-test("write allowWriteDir gating enforces strict directory descendants", async () => {
+async function assertStrictDirectoryGating(
+  toolName: "write" | "edit",
+  inputFor: (path: string) => unknown,
+): Promise<void> {
   const { emit } = setup();
   await emit("session_start");
   await emit("input", { text: "/plan-mode" });
   await emit("before_agent_start");
-  const inDir = await emit("tool_call", {
-    toolName: "write",
-    input: { path: PLAN_FILE, content: "# Plan\n" },
-  });
-  assert.equal(inDir, undefined, "write inside allowWriteDir should pass");
-  const directoryPath = blocked(
-    await emit("tool_call", {
-      toolName: "write",
-      input: { path: PLANS_DIR, content: "# Plan\n" },
-    }),
-  );
-  assert.ok(directoryPath, "write path equal to allowWriteDir should be blocked");
-  const outDir = blocked(
-    await emit("tool_call", {
-      toolName: "write",
-      input: { path: OUTSIDE_FILE, content: "# Plan\n" },
-    }),
-  );
-  assert.ok(outDir, "write outside allowWriteDir should be blocked");
+  const inDir = await emit("tool_call", { toolName, input: inputFor(PLAN_FILE) });
+  assert.equal(inDir, undefined, `${toolName} inside allowWriteDir should pass`);
+  const directoryPath = blocked(await emit("tool_call", { toolName, input: inputFor(PLANS_DIR) }));
+  assert.ok(directoryPath, `${toolName} path equal to allowWriteDir should be blocked`);
+  const outDir = blocked(await emit("tool_call", { toolName, input: inputFor(OUTSIDE_FILE) }));
+  assert.ok(outDir, `${toolName} outside allowWriteDir should be blocked`);
+}
+
+test("write allowWriteDir gating enforces strict directory descendants", async () => {
+  await assertStrictDirectoryGating("write", (path) => ({ path, content: "# Plan\n" }));
 });
 
 test("edit allowWriteDir gating enforces strict directory descendants", async () => {
-  const { emit } = setup();
-  await emit("session_start");
-  await emit("input", { text: "/plan-mode" });
-  await emit("before_agent_start");
-  const inDir = await emit("tool_call", {
-    toolName: "edit",
-    input: {
-      path: PLAN_FILE,
-      edits: [{ oldText: "old", newText: "new" }],
-    },
-  });
-  assert.equal(inDir, undefined, "edit inside allowWriteDir should pass");
-  const directoryPath = blocked(
-    await emit("tool_call", {
-      toolName: "edit",
-      input: { path: PLANS_DIR, edits: [{ oldText: "old", newText: "new" }] },
-    }),
-  );
-  assert.ok(directoryPath, "edit path equal to allowWriteDir should be blocked");
-  const outDir = blocked(
-    await emit("tool_call", {
-      toolName: "edit",
-      input: { path: OUTSIDE_FILE, edits: [{ oldText: "old", newText: "new" }] },
-    }),
-  );
-  assert.ok(outDir, "edit outside allowWriteDir should be blocked");
+  await assertStrictDirectoryGating("edit", (path) => ({ path, edits: [{ oldText: "old", newText: "new" }] }));
 });
 
 test("write and edit unsupported paths are blocked by gating", async () => {

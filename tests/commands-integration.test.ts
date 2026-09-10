@@ -93,6 +93,29 @@ test("builtin-tools registration returns a reader tied to the Pi tool state", as
   });
 });
 
+test("builtin-tools refreshes current tool status on all four events without returning a result", async () => {
+  const mock = createMockPi();
+  const { ctx, statuses, notifications } = createMockCtx();
+  // Register only builtin-tools so another handler cannot mask its return value.
+  registerBuiltinTools(mock.pi, () => DEFAULT_CONFIG);
+
+  let expectedUpdates = 0;
+  for (const [eventName, activeTools, status] of [
+    ["session_start", ["read", "external_tool"], "[R-------]"],
+    ["turn_start", ["write", "powershell", "external_tool"], "[-W--P---]"],
+    ["agent_settled", ["grep", "external_tool"], "[------G-]"],
+    ["input", ["external_tool"], "[--------]"],
+  ] as const) {
+    mock.setActiveTools([...activeTools]);
+    assert.equal(await mock.emit(eventName, {}, ctx), undefined, eventName);
+    assert.equal(statuses.length, ++expectedUpdates, eventName);
+    assert.deepEqual(statuses.at(-1), { key: "pi-tools-switch-status", value: status }, eventName);
+    assert.deepEqual(mock.activeTools(), activeTools, eventName);
+  }
+  assert.deepEqual(notifications, []);
+  assert.deepEqual(mock.appendedEntries, []);
+});
+
 test("registers exactly the seven expected commands", async () => {
   const mock = await setup();
   assert.deepEqual([...mock.commands.keys()], TARGET_COMMANDS);

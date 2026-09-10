@@ -67,6 +67,15 @@ test("toggleBuiltinTools dedupes repeated tools and keeps external tools", () =>
   assert.deepEqual(disabled, ["read"]);
 });
 
+test("toggleBuiltinTools dedupes initial tools without mutating inputs or changing first-seen order", () => {
+  const activeTools = Object.freeze(["read", "external_tool", "read", "external_tool", "bash"]);
+  const tools = ["read", "grep", "read", "grep"] as const;
+  assert.deepEqual(toggleBuiltinTools(activeTools, tools, true), ["read", "external_tool", "bash", "grep"]);
+  assert.deepEqual(toggleBuiltinTools(activeTools, tools, false), ["external_tool", "bash"]);
+  assert.deepEqual(activeTools, ["read", "external_tool", "read", "external_tool", "bash"]);
+  assert.deepEqual(tools, ["read", "grep", "read", "grep"]);
+});
+
 test("validateBuiltinTools accepts only valid lists", () => {
   const ok = validateBuiltinTools(["read", "bash", "powershell", "grep"]);
   assert.equal(ok.ok, true);

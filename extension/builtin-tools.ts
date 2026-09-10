@@ -94,9 +94,8 @@ export function toggleBuiltinTools(
   tools: readonly BuiltinToolName[],
   enabled: boolean,
 ): string[] {
-  const target = new Set(tools);
   const next = new Set(activeTools);
-  for (const tool of target) {
+  for (const tool of tools) {
     if (enabled) next.add(tool);
     else next.delete(tool);
   }
@@ -264,18 +263,13 @@ export function register(pi: ExtensionAPI, getConfig: () => Config): ToolStatusR
     },
   });
 
-  pi.on("session_start", async (_event, ctx) => {
+  const onRefreshStatus = async (_event: unknown, ctx: ExtensionContext): Promise<void> => {
     refreshStatus(ctx);
-  });
-  pi.on("turn_start", async (_event, ctx) => {
-    refreshStatus(ctx);
-  });
-  pi.on("agent_settled", async (_event, ctx) => {
-    refreshStatus(ctx);
-  });
-  pi.on("input", async (_event, ctx) => {
-    refreshStatus(ctx);
-  });
+  };
+  pi.on("session_start", onRefreshStatus);
+  pi.on("turn_start", onRefreshStatus);
+  pi.on("agent_settled", onRefreshStatus);
+  pi.on("input", onRefreshStatus);
 
   return readToolStatus;
 }

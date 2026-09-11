@@ -1,6 +1,6 @@
 {
   "name": "pi-tools-switch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pi extension for built-in tools management and prefix-caching-friendly tool gating",
   "keywords": [
     "pi-package",
@@ -8,6 +8,10 @@
     "pi-coding-agent",
     "extension"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gszj2018/pi-tools-switch.git"
+  },
   "license": "MIT",
   "author": "gszj2018",
   "type": "module",
@@ -17,6 +21,7 @@
     "schemas",
     "README.md",
     "README.zh-CN.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {

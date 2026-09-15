@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-09-15
+
+### Added
+
+- Added subagent detection for `HamdiMaz/pi-sub-agent` via the `PI_SUB_AGENT_DEPTH` environment variable.
+
 ## [0.1.1] - 2026-09-11
 
 ### Added

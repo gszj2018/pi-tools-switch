@@ -1,6 +1,6 @@
 {
   "name": "pi-tools-switch",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Pi extension for built-in tools management and prefix-caching-friendly tool gating",
   "keywords": [
     "pi-package",

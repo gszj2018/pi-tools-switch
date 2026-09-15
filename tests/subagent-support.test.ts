@@ -18,6 +18,7 @@ test("BUILTIN_SUBAGENT_ENV_VARS covers the documented subagent frameworks", () =
     "PI_SUBAGENT_ID",
     "PI_SUBAGENT_SESSION",
     "PI_SUBAGENT_ACTIVITY_FILE",
+    "PI_SUB_AGENT_DEPTH",
   ];
   assert.deepEqual([...BUILTIN_SUBAGENT_ENV_VARS].sort(), expected.sort());
 });
@@ -27,11 +28,13 @@ test("isSubagentEnv detects built-in vars", () => {
   assert.equal(isSubagentEnv({ PI_IS_SUBAGENT: "1" }, []), true);
   assert.equal(isSubagentEnv({ PI_SUBAGENT_SESSION_ID: "abc" }, []), true);
   assert.equal(isSubagentEnv({ PI_SUBAGENT_ACTIVITY_FILE: "/tmp/x.json" }, []), true);
+  assert.equal(isSubagentEnv({ PI_SUB_AGENT_DEPTH: "1" }, []), true);
 });
 
 test("isSubagentEnv treats empty-string values as not set", () => {
   assert.equal(isSubagentEnv({ PI_IS_SUBAGENT: "" }, []), false);
   assert.equal(isSubagentEnv({ PI_SUBAGENT_RUN_ID: "" }, []), false);
+  assert.equal(isSubagentEnv({ PI_SUB_AGENT_DEPTH: "" }, []), false);
 });
 
 test("isSubagentEnv honors extra user vars on top of the built-in list", () => {

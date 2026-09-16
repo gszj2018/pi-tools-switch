@@ -11,4 +11,6 @@ You are exiting any active tool gating mode and returning to **normal mode**.
 - The `exit_mode` tool remains available, but calling it fails when no gating mode is active.
 
 ---
+User instructions below. **If none provided, only acknowledge your mode — do not proceed.**
+---
 $@

@@ -26,4 +26,6 @@ When the plan is complete:
 > The system reports your current mode through an injected message. Treat that message as authoritative. If it says you are not in any gating mode, you have already exited plan mode; proceed with normal execution.
 
 ---
+User instructions below. **If none provided, only acknowledge your mode — do not proceed.**
+---
 $@

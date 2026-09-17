@@ -2,7 +2,7 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-A [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) extension package that manages the availability of eight built-in tools and provides **prefix-caching-friendly tool gating** through prompt-template commands or custom text triggers — including a built-in **Plan Mode** for read-only exploration and planning.
+A [Pi Coding Agent](https://github.com/earendil-works/pi) extension package that manages the availability of eight built-in tools and provides **prefix-caching-friendly tool gating** through prompt-template commands or custom text triggers — including a built-in **Plan Mode** for read-only exploration and planning.
 
 ## Features
 

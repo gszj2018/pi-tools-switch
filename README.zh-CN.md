@@ -2,7 +2,7 @@
 
 [English](./README.md) | 简体中文
 
-一个 [Pi Coding Agent](https://github.com/earendil-works/pi-coding-agent) 扩展包，用于管理 8 个内置工具的可用性，并通过 prompt template 命令或自定义文本触发器实现**前缀缓存友好的工具门控**，包括内置的**计划模式（Plan Mode）**，用于只读探索与制定计划。
+一个 [Pi Coding Agent](https://github.com/earendil-works/pi) 扩展包，用于管理 8 个内置工具的可用性，并通过 prompt template 命令或自定义文本触发器实现**前缀缓存友好的工具门控**，包括内置的**计划模式（Plan Mode）**，用于只读探索与制定计划。
 
 ## 功能
 
